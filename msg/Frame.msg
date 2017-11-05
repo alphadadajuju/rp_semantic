@@ -1,0 +1,4 @@
+uint32 node_id
+sensor_msgs/Image label
+sensor_msgs/Image raw_rgb
+sensor_msgs/PointCloud2 raw_pointcloud
