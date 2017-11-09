@@ -13,8 +13,6 @@ from cv_bridge import CvBridge, CvBridgeError
 import sys
 import time
 
-#caffe_root = '/home/alpha/github/caffe-segnet-cudnn5/'
-#sys.path.insert(0, caffe_root + 'python')
 import caffe
 
 
@@ -45,14 +43,14 @@ class SegnetSemantic:
         caffe.set_mode_gpu()
         caffe.set_device(0) 
 
-        low_res = True
+        low_res = False
 
         if low_res:
             model = '/home/alpha/catkin_ws/src/segnet_program/src/segnet_sun_low_resolution.prototxt' # runtime error if do not include full path
             weights = '/home/alpha/catkin_ws/src/segnet_program/src/segnet_sun_low_resolution.caffemodel'
         else:
-            model = 'segnet_sun.prototxt'
-            weights = 'segnet_sun.caffemodel'
+            model = '/home/alpha/catkin_ws/src/segnet_program/src/segnet_sun.prototxt'
+            weights = '/home/alpha/catkin_ws/src/segnet_program/src/segnet_sun.caffemodel'
 
         colours = '/home/alpha/catkin_ws/src/segnet_program/src/sun.png'
         self.net = caffe.Net(model, weights, caffe.TEST)
@@ -87,7 +85,7 @@ class SegnetSemantic:
         self.pointcloud_sub = rospy.Subscriber('/camera/depth_registered/points', PointCloud2, self.pointcloud_callback, queue_size=1, buff_size=2**24) # change topic's name accordingly
 
         # publisher
-        self.semantic_pub = rospy.Publisher('/semantic_frame', Frame, queue_size=1) # change topic's name accordingly
+        self.semantic_pub = rospy.Publisher('/rp_semantic/labels_pointcloud', Frame, queue_size=1) # change topic's name accordingly
 
         
         
@@ -129,9 +127,9 @@ class SegnetSemantic:
         '''
         self.f_height = rgb_cam_msg.height
         self.f_width = rgb_cam_msg.width
-        
+        print (self.f_height)
+        print (self.f_width)
 
-    #def depth_callback(self, depth_msg):
 
     def controlLoop(self):
             #print ('rgb:' + str(self.rgb_has_fresh))
@@ -144,10 +142,6 @@ class SegnetSemantic:
                 #plt.figure(1) # resized input simage
                 #imgplot = plt.imshow(self.rgb_frame) 
                 #plt.show(block=False)
-                #input("Press Enter to continue...")
-                #cv2.namedWindow("Input")
-                #cv2.imshow("Input", self.rgb_frame)
-                #cv2.waitKey(0)
 
                 input_image = self.rgb_frame.transpose((2, 0, 1))
                 input_image = np.asarray([input_image])
@@ -175,21 +169,29 @@ class SegnetSemantic:
                     cv2.LUT(segmentation_ind_3ch, self.label_colours, segmentation_rgb)
                     segmentation_rgb = segmentation_rgb.astype(float) / 255
 
-                    print (segmentation_ind.dtype)
             
                     print '%30s' % 'Executed SegNet in ', str((end - start) * 1000), 'ms'
 
-                    plt.figure() # semantic label
-                    plt.imshow(segmentation_rgb) 
-                    plt.show(block=True)
+                    #plt.figure() # semantic label
+                    #plt.imshow(segmentation_rgb) 
+                    #plt.show(block=True)
 
                     self.frame_message.node_id = self.node_id
                     self.node_id += 1
-                    self.frame_message.label = self.bridge.cv2_to_imgmsg(np.uint8(segmentation_ind), "passthrough")
+                    print ('shape of image:' + str(segmentation_ind.shape))
+                    self.frame_message.label = self.bridge.cv2_to_imgmsg(np.uint8(segmentation_ind), "mono8")
                     self.frame_message.raw_rgb = self.rgb_message
                     self.frame_message.raw_pointcloud = self.pointcloud_message
                     self.semantic_pub.publish(self.frame_message)
 
+                    # for debug
+                    #print ('shape of label message: ' + str(self.frame_message.label))
+                    self.test = self.bridge.imgmsg_to_cv2(self.frame_message.label, "mono8")
+                    if np.any(self.test > 38):
+                        print('bad news')
+                        print(self.test)
+                    else:
+                        print("good news")
 
                     self.rgb_has_fresh = False
                     self.pointcloud_has_fresh = False
