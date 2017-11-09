@@ -25,7 +25,7 @@ from segnet_program.msg import Frame
 
 class SegnetSemantic:
     def __init__(self):
-        print ('Program begins:')
+        print ('Semantic initialized:')
 
     def start(self):
 
@@ -35,10 +35,14 @@ class SegnetSemantic:
         
 
     def rosSetup(self):
+        # caffe_root = '/home/alpha/github/caffe-segnet-cudnn5/'
+        caffe_root = '/home/albert/GitHub/caffe-segnet-cudnn5/'
+
+        # model_path = '/home/alpha/catkin_ws/src/segnet_program/src/'
+        model_path = '/home/albert/rp_data'
 
         # initialize segnet 
         sys.path.append('/usr/local/lib/python2.7/site-packages')
-        caffe_root = '/home/alpha/github/caffe-segnet-cudnn5/'
         sys.path.insert(0, caffe_root + 'python')
         caffe.set_mode_gpu()
         caffe.set_device(0) 
@@ -46,13 +50,13 @@ class SegnetSemantic:
         low_res = False
 
         if low_res:
-            model = '/home/alpha/catkin_ws/src/segnet_program/src/segnet_sun_low_resolution.prototxt' # runtime error if do not include full path
-            weights = '/home/alpha/catkin_ws/src/segnet_program/src/segnet_sun_low_resolution.caffemodel'
+            model = model_path + 'segnet_sun_low_resolution.prototxt' # runtime error if do not include full path
+            weights = model_path + 'segnet_sun_low_resolution.caffemodel'
         else:
-            model = '/home/alpha/catkin_ws/src/segnet_program/src/segnet_sun.prototxt'
-            weights = '/home/alpha/catkin_ws/src/segnet_program/src/segnet_sun.caffemodel'
+            model = model_path + 'segnet_sun.prototxt'
+            weights = model_path + 'segnet_sun.caffemodel'
 
-        colours = '/home/alpha/catkin_ws/src/segnet_program/src/sun.png'
+        colours = model_path + 'sun.png'
         self.net = caffe.Net(model, weights, caffe.TEST)
         
         self.input_shape = self.net.blobs['data'].data.shape # 1 x 3 x 224 z 224

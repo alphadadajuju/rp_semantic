@@ -26,7 +26,7 @@ class BoWPmatching:
         self.bowp_subscriber = rospy.Subscriber("rp_semantic/bow_bowp_descriptors", BoWP, self.descriptor_callback)
 
         self.t = -1 # Timestep indication
-        self.p = 3 # Frame margin for matching min of 6
+        self.p = int(3) # Frame margin for matching min of 6
 
         ### Important variables
         # Descriptors are stored as (N_nodes x N_words) matrices
@@ -40,6 +40,8 @@ class BoWPmatching:
         self.prior_neighbourhood = 1
         self.previous_loop_closure_event = -1
 
+        print ('BoWP matching initialized:')
+
 
     def descriptor_callback(self, msg):
         self.mutex.acquire()
@@ -50,14 +52,13 @@ class BoWPmatching:
              pass
         else:
             # Additions
-            if DEBUG_MODE:
-                print("Received descriptors", msg.bow, msg.bowp)
+            print("Received descriptors")
 
             self.t += 1
 
             if self.bow_descriptors.size == 0:
-                self.bow_descriptors_list = [msg.bow]
-                self.bowp_descriptors_list = [msg.bowp]
+                self.bow_descriptors_list = [list(msg.bow)]
+                self.bowp_descriptors_list = [list(msg.bowp)]
             else:
                 self.bow_descriptors_list.append(msg.bow)
                 self.bowp_descriptors_list.append(msg.bowp)
@@ -65,7 +66,7 @@ class BoWPmatching:
             self.bow_descriptors = np.matrix(self.bow_descriptors_list)
             self.bowp_descriptors = np.matrix(self.bowp_descriptors_list)
 
-            if self.bow_descriptors.shape[0] > self.p:
+            if self.bow_descriptors.shape[0] > self.p+2:
                 self.previous_loop_closure_event = self.match_last_frame()
 
             if self.previous_loop_closure_event != -1:
@@ -82,7 +83,7 @@ class BoWPmatching:
         n_i_bow = np.sum(self.bow_descriptors, axis=1)
         n_i_bowp = np.sum(self.bowp_descriptors, axis=1)
 
-        # n_w - count number of images containing w in all nodes (sum descriptor columns (axis=0))
+        # n_w - count number of words of type w in all nodes (sum descriptor columns (axis=0))
         n_w_bow = np.sum(self.bow_descriptors, axis=0)
         n_w_bowp = np.sum(self.bowp_descriptors, axis=0)
 
@@ -92,11 +93,12 @@ class BoWPmatching:
 
         bow_tfidf = np.asmatrix(np.zeros(self.bow_descriptors.shape))
         bowp_tfidf = np.asmatrix(np.zeros(self.bowp_descriptors.shape))
+
         for i in range(0, self.bow_descriptors.shape[0]):
             bow_tfidf[i] = np.multiply(np.divide(self.bow_descriptors[i], n_i_bow[i]),
-                                       np.log( N_bow / n_w_bow ))
+                                       np.log( N_bow / (n_w_bow+ 1E-12) ) )
             bowp_tfidf[i] = np.multiply(np.divide(self.bowp_descriptors[i], n_i_bowp[i]),
-                                        np.log(N_bowp / n_w_bowp))
+                                        np.log(N_bowp / (n_w_bowp + 1E-12)) )
 
             #Normalize the tf-idf vectors
             #bow_tfidf[i] = bow_tfidf[i]/np.sum(bow_tfidf[i])
@@ -104,11 +106,11 @@ class BoWPmatching:
 
         #print("tfidf", bow_tfidf)
 
-        bow_similarity_scores = np.zeros(bow_tfidf.shape[0] - 1)
-        bowp_similarity_scores = np.zeros(bowp_tfidf.shape[0] - 1)
-        for i in range(0, bow_tfidf.shape[0] - 1):
-            bow_similarity_scores[i] = 1.0/(cosine_dist(bow_tfidf[-1], bow_tfidf[i]) + 1E-12)
-            bowp_similarity_scores[i] = 1.0/(cosine_dist(bowp_tfidf[-1], bowp_tfidf[i]) + 1E-12)
+        bow_similarity_scores = np.zeros(bow_tfidf.shape[0] - 1 - self.p)
+        bowp_similarity_scores = np.zeros(bowp_tfidf.shape[0] - 1 - self.p)
+        for i in range(0, bow_tfidf.shape[0] - 1 - self.p):
+            bow_similarity_scores[i] = 1.0/np.power(cosine_dist(bow_tfidf[-1], bow_tfidf[i]) + 1E-12, 2.0)
+            bowp_similarity_scores[i] = 1.0/np.power(cosine_dist(bowp_tfidf[-1], bowp_tfidf[i]) + 1E-12, 2.0)
 
         if DEBUG_MODE:
             print("Similarity scores", bow_similarity_scores)
@@ -148,6 +150,7 @@ class BoWPmatching:
         if DEBUG_MODE:
             print("Posterior: ", posterior)
 
+        print("Posterior: ", posterior)
         return np.argmax(posterior[:-1]) if np.amax(posterior[:-1]) > 0.5 else -1
 
     def compute_prior(self, prior_size, previous_loop_closure):
@@ -177,6 +180,7 @@ class BoWPmatching:
 if __name__ == '__main__':
     rospy.init_node("bowp_matching")
 
+    print("Initializing matching")
     np.set_printoptions(suppress=True, precision=5)
 
     matcher = BoWPmatching()
