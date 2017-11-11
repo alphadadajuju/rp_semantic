@@ -53,6 +53,8 @@ class BoWP_hist:
 
         self.wait_for_message = True
         self.label_2d_ready = False
+        self.label_2d = None
+        self.label_cluster = LabelClusters()
         #print(self.pairs)
         #indices =  self.pairs.index((4,3))
         #print(indices)
@@ -131,6 +133,12 @@ class BoWP_hist:
             self.bowp_message.node_id = self.node_id
             self.bowp_message.bow = tuple(self.bow)
             self.bowp_message.bowp = tuple(self.bowp_flat)
+
+            # Adding extra info for RANSAC and other
+            self.bowp_message.clusters = self.label_cluster.clusters
+            self.bowp_message.raw_rgb = self.label_cluster.raw_rgb
+            self.bowp_message.raw_pointcloud = self.label_cluster.raw_pointcloud
+
             self.bowp_pub.publish(self.bowp_message)
             self.wait_for_message = True
 

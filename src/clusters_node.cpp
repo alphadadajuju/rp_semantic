@@ -81,8 +81,6 @@ void ClustersPointClouds::frameCallback(const rp_semantic::Frame &msg){
     cv::Mat label_img;
     int num_labels = 37 ; // we can optimize it later
     rp_semantic::LabelClusters msg_out;
-    
-
 
     // Unpack sensor_msgs/Pointcloud2 in msg.raw_pointcloud into a pointcloud
     pcl_conversions::toPCL( msg.raw_pointcloud , pcl_pc2 );
@@ -106,10 +104,10 @@ void ClustersPointClouds::frameCallback(const rp_semantic::Frame &msg){
 
 
     // Convert structured XYZRGB pointcloud + cv::Mat into dense XYZL pointcloud
-    std::cout<< "label_img.cols  = "<< label_img.cols   << endl;
-    std::cout<< "label_img.rows  = "<< label_img.rows   << endl;
-    std::cout<< "Cloud In width  = "<< cloud_in->width  << endl;
-    std::cout<< "Cloud in height = "<< cloud_in->height << endl;
+    ROS_DEBUG_STREAM("label_img.cols  = "<< label_img.cols   << endl);
+    ROS_DEBUG_STREAM( "label_img.rows  = "<< label_img.rows   << endl);
+    ROS_DEBUG_STREAM( "Cloud In width  = "<< cloud_in->width  << endl);
+    ROS_DEBUG_STREAM( "Cloud in height = "<< cloud_in->height << endl);
 
     int pc_idx  = 0 ; // Index of the labelled rgb image row wise .
     for(int x = 0 ; x < label_img.cols ; x++ ){
@@ -136,7 +134,7 @@ void ClustersPointClouds::frameCallback(const rp_semantic::Frame &msg){
      }
  }
 
- std::cout<< " finsished making label cloud" << endl;
+ ROS_DEBUG_STREAM( " finsished making label cloud" << endl);
 
    // Extracting cluster for each labels  
  for(int cl = 0 ; cl < num_labels ; cl ++ ){
@@ -153,12 +151,12 @@ void ClustersPointClouds::frameCallback(const rp_semantic::Frame &msg){
       }
 
     if( cloud_filtered_labels->points.empty()){
-        std::cout << "No points of label  " << cl << ": " << std::endl;
+        ROS_DEBUG_STREAM( "No points of label  " << cl << ": " << std::endl);
         continue ;
     }
 
 
-    std::cout << "Clustering label  " << cl << ": " << std::endl;
+    ROS_DEBUG_STREAM("Clustering label  " << cl << ": " << std::endl);
     
     // Creating the KdTree object for the search method of the extraction
     pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ>);
@@ -219,6 +217,8 @@ void ClustersPointClouds::frameCallback(const rp_semantic::Frame &msg){
 
    msg_out.node_id = msg.node_id ;
    msg_out.labels  = msg.label ;
+   msg_out.raw_rgb = msg.raw_rgb;
+   msg_out.raw_pointcloud = msg.raw_pointcloud;
    clusters_msg_pub.publish(msg_out) ;
 
 
