@@ -1,11 +1,11 @@
 // ROS
-#include <ros/ros.h> 
+#include <ros/ros.h>
 
 // ROS messages
 #include <std_msgs/Int16.h>
-#include "std_msgs/String.h" 
-#include "rp_semantic/Cluster.h"  
-#include "rp_semantic/LabelClusters.h" 
+#include "std_msgs/String.h"
+#include "rp_semantic/Cluster.h"
+#include "rp_semantic/LabelClusters.h"
 #include "rp_semantic/Frame.h"
 
 // Headers C_plus_plus
@@ -59,14 +59,14 @@ private:
 
 public:
 
-    ClustersPointClouds(); 
-    void frameCallback(const rp_semantic::Frame &msg);       
+    ClustersPointClouds();
+    void frameCallback(const rp_semantic::Frame &msg);
     //ProcessInputPointCloud(const pcl::PointCloud<pcl::PointXYZ> cloud_in , pcl::PointCloud<pcl::PointXYZL>::Ptr cloud, pcl::PointCloud<pcl::PointXYZL>::Ptr &cloud_filtered ) ;       // Create Structured Point cloud 
     //Euclidean_ClusterExtraction(pcl::PointCloud<pcl::PointXYZ> &cloud) ; // Eucleadean Clusters of Point cloud 
 };
 
 
-ClustersPointClouds::ClustersPointClouds(){  
+ClustersPointClouds::ClustersPointClouds(){
 
     // Subscribers and Publisher // Topic subscribe to : rp_semantic/labels_pointcloud
     segnet_msg_sub = cl_handle.subscribe("/semantic_frame", 10, &ClustersPointClouds::frameCallback , this ); // Subscriber
@@ -100,7 +100,7 @@ void ClustersPointClouds::frameCallback(const rp_semantic::Frame &msg){
     cv_ptr->image.convertTo(label_img, CV_8UC1);
 
     // Resizing label image to the size of cloud cloud_in->width and cloud_in->height
-    cv::resize(label_img , label_img, cv::Size(cloud_in->width, cloud_in->height), 0 , 0 , cv::INTER_NEAREST ) ; 
+    cv::resize(label_img , label_img, cv::Size(cloud_in->width, cloud_in->height), 0 , 0 , cv::INTER_NEAREST ) ;
 
 
     // Convert structured XYZRGB pointcloud + cv::Mat into dense XYZL pointcloud
@@ -115,174 +115,114 @@ void ClustersPointClouds::frameCallback(const rp_semantic::Frame &msg){
             pc_idx = x + label_img.cols*y;  // i = x + width*y;
 
             if(  std::isnan(cloud_in->points[pc_idx].x)  && std::isnan(cloud_in->points[pc_idx].y) && std::isnan(cloud_in->points[pc_idx].z ) ){
-             continue;
-         }
+                continue;
+            }
 
-         pcl::PointXYZL p;
+            pcl::PointXYZL p;
 
-         p.x = cloud_in->points[pc_idx].x ;
-         p.y = cloud_in->points[pc_idx].y ;
-         p.z = cloud_in->points[pc_idx].z ;
-         p.label = label_img.at<uchar>(y,x) ;
-           /*
-           std::cout<< "Structured Cloud x  = "<< p.x << endl;
-           std::cout<< "Structured Cloud y  = "<< p.y << endl;
-           std::cout<< "Structured Cloud z  = "<< p.z << endl;
-           std::cout<< "Structured Cloud label  = "<< p.label << endl;
-           */
-         cloud->points.push_back(p);
-     }
- }
-
- ROS_DEBUG_STREAM( " finsished making label cloud" << endl);
-
-   // Extracting cluster for each labels  
- for(int cl = 0 ; cl < num_labels ; cl ++ ){
-
-    // Create the filtering object
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered_labels(new pcl::PointCloud<pcl::PointXYZ> ); // Filtered point cloud of type pcl::PointXYZL
-
-    for (size_t i = 0; i < cloud->points.size (); ++i)
-      {
-        if(cloud->points[i].label == cl){
-            pcl::PointXYZ p(cloud->points[i].x , cloud->points[i].y, cloud->points[i].z ) ;
-            cloud_filtered_labels->points.push_back(p) ;
-        }
-      }
-
-    if( cloud_filtered_labels->points.empty()){
-        ROS_DEBUG_STREAM( "No points of label  " << cl << ": " << std::endl);
-        continue ;
-    }
-
-
-    ROS_DEBUG_STREAM("Clustering label  " << cl << ": " << std::endl);
-    
-    // Creating the KdTree object for the search method of the extraction
-    pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ>);
-    tree->setInputCloud (cloud_filtered_labels);
-
-    std::vector<pcl::PointIndices> cluster_indices;
-    pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
-    ec.setClusterTolerance (0.04); // 2cm
-    ec.setMinClusterSize (100);
-    ec.setMaxClusterSize (25000);
-    ec.setSearchMethod (tree);
-    ec.setInputCloud (cloud_filtered_labels);
-    ec.extract (cluster_indices);
-
-    int j = 0;
-    for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
-    {
-
-        //find mean
-        pcl::PointXYZ p(0,0,0);
-        for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit){
-            
-            p.x += cloud_filtered_labels->points[*pit].x ;
-            p.y += cloud_filtered_labels->points[*pit].y ;
-            p.z += cloud_filtered_labels->points[*pit].z ;
-        //
-        }
-
-        p.x /= (float) it->indices.size();
-        p.y /= (float) it->indices.size();
-        p.z /= (float) it->indices.size();    
-          
-        //compute dist
-    float dist_max = 0 ;
-    for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit){
-        float delta_x = p.x - cloud_filtered_labels->points[*pit].x;
-        float delta_y = p.y - cloud_filtered_labels->points[*pit].y;
-        float delta_z = p.z - cloud_filtered_labels->points[*pit].z;
-
-        float dist = delta_x * delta_x + delta_y*delta_y + delta_z*delta_z ;
-        if (dist > dist_max){
-            dist_max = dist ; 
+            p.x = cloud_in->points[pc_idx].x ;
+            p.y = cloud_in->points[pc_idx].y ;
+            p.z = cloud_in->points[pc_idx].z ;
+            p.label = label_img.at<uchar>(y,x) ;
+            /*
+            std::cout<< "Structured Cloud x  = "<< p.x << endl;
+            std::cout<< "Structured Cloud y  = "<< p.y << endl;
+            std::cout<< "Structured Cloud z  = "<< p.z << endl;
+            std::cout<< "Structured Cloud label  = "<< p.label << endl;
+            */
+            cloud->points.push_back(p);
         }
     }
 
-    rp_semantic::Cluster cluster;
-    cluster.label = cl ;
-    cluster.x = p.x ;
-    cluster.y = p.y ;
-    cluster.z = p.z ;    
-    cluster.radius = std::sqrt(dist_max);
+    ROS_DEBUG_STREAM( " finsished making label cloud" << endl);
 
-    msg_out.clusters.push_back(cluster);
-    } //cl clusters
+    // Extracting cluster for each labels
+    for(int cl = 0 ; cl < num_labels ; cl ++ ){
 
-} // cl
+        // Create the filtering object
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered_labels(new pcl::PointCloud<pcl::PointXYZ> ); // Filtered point cloud of type pcl::PointXYZL
+
+        for (size_t i = 0; i < cloud->points.size (); ++i)
+        {
+            if(cloud->points[i].label == cl){
+                pcl::PointXYZ p(cloud->points[i].x , cloud->points[i].y, cloud->points[i].z ) ;
+                cloud_filtered_labels->points.push_back(p) ;
+            }
+        }
+
+        if( cloud_filtered_labels->points.empty()){
+            ROS_DEBUG_STREAM( "No points of label  " << cl << ": " << std::endl);
+            continue ;
+        }
 
 
-   msg_out.node_id = msg.node_id ;
-   msg_out.labels  = msg.label ;
-   msg_out.raw_rgb = msg.raw_rgb;
-   msg_out.raw_pointcloud = msg.raw_pointcloud;
-   clusters_msg_pub.publish(msg_out) ;
+        ROS_DEBUG_STREAM("Clustering label  " << cl << ": " << std::endl);
 
+        // Creating the KdTree object for the search method of the extraction
+        pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ>);
+        tree->setInputCloud (cloud_filtered_labels);
 
+        std::vector<pcl::PointIndices> cluster_indices;
+        pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
+        ec.setClusterTolerance (0.04); // 2cm
+        ec.setMinClusterSize (100);
+        ec.setMaxClusterSize (25000);
+        ec.setSearchMethod (tree);
+        ec.setInputCloud (cloud_filtered_labels);
+        ec.extract (cluster_indices);
+
+        int j = 0;
+        for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
+        {
+
+            //find mean
+            pcl::PointXYZ p(0,0,0);
+            for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit){
+                p.x += cloud_filtered_labels->points[*pit].x ;
+                p.y += cloud_filtered_labels->points[*pit].y ;
+                p.z += cloud_filtered_labels->points[*pit].z ;
+            }
+
+            p.x /= (float) it->indices.size();
+            p.y /= (float) it->indices.size();
+            p.z /= (float) it->indices.size();
+
+            //compute dist
+            float dist_max = 0 ;
+            for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit){
+                float delta_x = p.x - cloud_filtered_labels->points[*pit].x;
+                float delta_y = p.y - cloud_filtered_labels->points[*pit].y;
+                float delta_z = p.z - cloud_filtered_labels->points[*pit].z;
+
+                float dist = delta_x * delta_x + delta_y*delta_y + delta_z*delta_z ;
+                if (dist > dist_max){
+                    dist_max = dist ;
+                }
+            }
+
+            rp_semantic::Cluster cluster;
+            cluster.label = cl ;
+            cluster.x = p.x ;
+            cluster.y = p.y ;
+            cluster.z = p.z ;
+            cluster.radius = std::sqrt(dist_max);
+
+            msg_out.clusters.push_back(cluster);
+        } //cl clusters
+
+    } // cl
+
+    msg_out.node_id = msg.node_id ;
+    msg_out.labels  = msg.label ;
+    msg_out.raw_rgb = msg.raw_rgb;
+    msg_out.raw_pointcloud = msg.raw_pointcloud;
+    clusters_msg_pub.publish(msg_out) ;
 } // end of callback function
-
-
-/*
-ClustersPointClouds::ProcessInputPointCloud(const pcl::PointCloud<pcl::PointXYZ> cloud_in ) { // pcl::PointCloud<pcl::PointXYZL>::Ptr cloud, pcl::PointCloud<pcl::PointXYZL>::Ptr &cloud_filtered  ){
-// Fill in the cloud data
-    cloud.width    = 512  ;
-    cloud.height   = 512  ;
-    cloud.is_dense = true ;
-    cloud.points.resize (cloud.width * cloud.height);
-
-    for (size_t i = 0; i < cloud->points.size (); ++i)
-    {
-        cloud->points[i].x = cloud_in->points[i].x;
-        cloud->points[i].y = cloud_in->points[i].y;
-        cloud->points[i].z = cloud_in->points[i].z;
-        cloud->points[i].label = cloud_in->points[i].label;
-    }
-
-    std::cerr << "Cloud before filtering: " << std::endl;
-    for (size_t i = 0; i < cloud->points.size (); ++i){
-        std::cerr << "    " << cloud->points[i].x << " " 
-        << cloud->points[i].y << " " 
-        << cloud->points[i].z << std::endl;
-    }
-
-    // Create the filtering object
-    pcl::PassThrough<pcl::PointXYZL> pass;
-    pass.setInputCloud (cloud);
-    pass.setFilterFieldName ("label");
-    pass.setFilterLimits (0.9, 1.1);
-    //pass.setFilterLimitsNegative (true);
-    pass.filter (*cloud_filtered);
-
-    std::cerr << "Cloud after filtering: " << std::endl;
-    for (size_t i = 0; i < cloud_filtered->points.size (); ++i){
-        std::cerr << "    " << cloud_filtered->points[i].x << " " 
-        << cloud_filtered->points[i].y << " " 
-        << cloud_filtered->points[i].z << std::endl ;
-    }
-
-
-}
-
-
-ClustersPointClouds::Euclidean_ClusterExtraction(pcl::PointCloud<pcl::PointXYZ> &cloud){
-
-
-
-
-
-
-  }
-*/
-
-
 
 int main(int argc, char **argv)
 {
-   ros::init(argc, argv, "clusters_node");
-   ClustersPointClouds cluster_point_cloud;
-   ros::spin();
-   return 0 ;
+    ros::init(argc, argv, "clusters_node");
+    ClustersPointClouds cluster_point_cloud;
+    ros::spin();
+    return 0 ;
 }

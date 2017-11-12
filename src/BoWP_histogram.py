@@ -54,7 +54,7 @@ class BoWP_hist:
         self.wait_for_message = True
         self.label_2d_ready = False
         self.label_2d = None
-        self.label_cluster = LabelClusters()
+        self.label_cluster_msg = None
         #print(self.pairs)
         #indices =  self.pairs.index((4,3))
         #print(indices)
@@ -76,12 +76,12 @@ class BoWP_hist:
         '''
         print ('message received')
         if self.wait_for_message == True:
-            self.label_cluster = label_cluster_msg
-            self.node_id = self.label_cluster.node_id
+            self.label_cluster_msg = label_cluster_msg
+            self.node_id = self.label_cluster_msg.node_id
             
             try:
                 # bgr8 is the pixel encoding -- 8 bits per color, organized as blue/green/red
-                self.label_2d = self.bridge.imgmsg_to_cv2(self.label_cluster.labels, "mono8")
+                self.label_2d = self.bridge.imgmsg_to_cv2(self.label_cluster_msg.labels, "mono8")
                 self.label_2d_ready = True
                 self.wait_for_message = False
                 
@@ -135,9 +135,9 @@ class BoWP_hist:
             self.bowp_message.bowp = tuple(self.bowp_flat)
 
             # Adding extra info for RANSAC and other
-            self.bowp_message.clusters = self.label_cluster.clusters
-            self.bowp_message.raw_rgb = self.label_cluster.raw_rgb
-            self.bowp_message.raw_pointcloud = self.label_cluster.raw_pointcloud
+            self.bowp_message.clusters = self.label_cluster_msg.clusters
+            self.bowp_message.raw_rgb = self.label_cluster_msg.raw_rgb
+            self.bowp_message.raw_pointcloud = self.label_cluster_msg.raw_pointcloud
 
             self.bowp_pub.publish(self.bowp_message)
             self.wait_for_message = True
@@ -152,29 +152,29 @@ class BoWP_hist:
 
     def bowp_hist(self):
         count = 0
-        num_cluster = np.shape(self.label_cluster.clusters)[0] # num of clusters/objects in a node
+        num_cluster = np.shape(self.label_cluster_msg.clusters)[0] # num of clusters/objects in a node
         print (str(num_cluster) + ' clusters in this frame')
         for i in range(0, num_cluster):
             for j in range(i, num_cluster):
                 if i != j:
                     #print ('i:' + str(i))
                     #print ('j:' + str(j))
-                    p2p_dist = ((self.label_cluster.clusters[i].x - self.label_cluster.clusters[j].x)**2 + (self.label_cluster.clusters[i].y - self.label_cluster.clusters[j].y)**2 + (self.label_cluster.clusters[i].z - self.label_cluster.clusters[j].z)**2)**0.5
+                    p2p_dist = ((self.label_cluster_msg.clusters[i].x - self.label_cluster_msg.clusters[j].x) ** 2 + (self.label_cluster_msg.clusters[i].y - self.label_cluster_msg.clusters[j].y) ** 2 + (self.label_cluster_msg.clusters[i].z - self.label_cluster_msg.clusters[j].z) ** 2) ** 0.5
 
-                    if self.label_cluster.clusters[i].radius > p2p_dist:
+                    if self.label_cluster_msg.clusters[i].radius > p2p_dist:
                         #indice =  self.pairs.index((self.label_cluster.clusters[i].label,self.label_cluster.clusters[j].label))
                         count += 1
                         #print('count = ' + str(count))
                         #print('i label: ' + str(np.uint8(self.label_cluster.clusters[i].label)))
                         #print('j label: ' + str(np.uint8(self.label_cluster.clusters[j].label)))
-                        self.bowp[np.uint8(self.label_cluster.clusters[i].label)][np.uint8(self.label_cluster.clusters[j].label)] += 1
-                        print (self.bowp[np.uint8(self.label_cluster.clusters[i].label)][np.uint8(self.label_cluster.clusters[j].label)])
+                        self.bowp[np.uint8(self.label_cluster_msg.clusters[i].label)][np.uint8(self.label_cluster_msg.clusters[j].label)] += 1
+                        print (self.bowp[np.uint8(self.label_cluster_msg.clusters[i].label)][np.uint8(self.label_cluster_msg.clusters[j].label)])
 
-                    if self.label_cluster.clusters[j].radius > p2p_dist:
+                    if self.label_cluster_msg.clusters[j].radius > p2p_dist:
                         #indice =  self.pairs.index((self.label_cluster.clusters[j].label,self.label_cluster.clusters[i].label))
                         #print('i2 label: ' + str(np.uint8(self.label_cluster.clusters[i].label)))
                         #print('j2 label: ' + str(np.uint8(self.label_cluster.clusters[j].label)))
-                        self.bowp[np.uint8(self.label_cluster.clusters[j].label)][np.uint8(self.label_cluster.clusters[i].label)] += 1
+                        self.bowp[np.uint8(self.label_cluster_msg.clusters[j].label)][np.uint8(self.label_cluster_msg.clusters[i].label)] += 1
                     #print('combination:' + str(i) + ', ' + str(j))
                     
         #print (self.bowp)
