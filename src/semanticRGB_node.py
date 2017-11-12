@@ -111,7 +111,7 @@ class SegnetSemantic:
         
             self.rgb_frame = cv2.resize(self.rgb_frame, (self.input_shape[3], self.input_shape[2]))
             self.rgb_has_fresh = True
-            self.rgb_msg = rgb_msg
+            self.rgb_message = rgb_msg
             #print('shape' + str(self.rgb_frame.shape))
             #self.wait_for_new_frame = False
 
