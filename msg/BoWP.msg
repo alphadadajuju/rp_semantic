@@ -1,4 +1,4 @@
-uint32 node_id
+int32 node_id
 float64[] bow
 float64[] bowp
 sensor_msgs/Image raw_rgb

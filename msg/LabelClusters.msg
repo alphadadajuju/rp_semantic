@@ -1,4 +1,4 @@
-uint32 node_id
+int32 node_id
 sensor_msgs/Image labels
 rp_semantic/Cluster[] clusters
 sensor_msgs/Image raw_rgb
