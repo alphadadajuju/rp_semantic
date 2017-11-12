@@ -147,7 +147,10 @@ class BoWP_hist:
     def bow_hist(self):
         label_1d = np.squeeze(np.resize(self.label_2d, (1, 172800))) # width x height
         this_bow_hist = plt.hist(label_1d, bins= self.num_class , range=(1, self.num_class))
-        return (this_bow_hist[0])
+        this_bow_hist = this_bow_hist[0]
+
+        this_bow_hist[1] = this_bow_hist[2] = this_bow_hist[22] = 0
+        return (this_bow_hist)
 
     def bowp_hist(self):
         count = 0
@@ -156,6 +159,11 @@ class BoWP_hist:
         for i in range(0, num_cluster):
             for j in range(i, num_cluster):
                 if i != j:
+                    if self.label_cluster_msg.clusters[i].label == 1 or \
+                            self.label_cluster_msg.clusters[i].label == 2 or \
+                            self.label_cluster_msg.clusters[i].label == 22:
+                        continue
+
                     #print ('i:' + str(i))
                     #print ('j:' + str(j))
                     p2p_dist = ((self.label_cluster_msg.clusters[i].x - self.label_cluster_msg.clusters[j].x) ** 2 + (self.label_cluster_msg.clusters[i].y - self.label_cluster_msg.clusters[j].y) ** 2 + (self.label_cluster_msg.clusters[i].z - self.label_cluster_msg.clusters[j].z) ** 2) ** 0.5
