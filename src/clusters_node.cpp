@@ -53,10 +53,14 @@ class ClustersPointClouds{
 
 private:
 
-    ros::NodeHandle cl_handle;         // node handler
+    int num_labels ;
+    int min_cluster_size ;
+    int max_cluster_size ;
+    float cluster_tolerance ;
+    ros::NodeHandle cl_handle;         // node handler  
     ros::Subscriber segnet_msg_sub ;    // SegNet Message Subscriber
     ros::Publisher clusters_msg_pub ;   // Clusters node Message Publisher
-
+    
 public:
 
     ClustersPointClouds();
@@ -68,9 +72,19 @@ public:
 
 ClustersPointClouds::ClustersPointClouds(){
 
+    // Initialization of variables
+    num_labels = 37 ;
+    min_cluster_size = 0.04 ;
+    max_cluster_size = 100 ;
+    cluster_tolerance = 25000 ;
+    ros::param::get("rp_semantic/clusters_node/num_labels", num_labels) ; // we can optimize it later 
+    ros::param::get("rp_semantic/clusters_node/cluster_tolerance", cluster_tolerance) ; // we can optimize it later 
+    ros::param::get("rp_semantic/clusters_node/min_cluster_size", min_cluster_size) ; // we can optimize it later 
+    ros::param::get("rp_semantic/clusters_node/max_cluster_size", max_cluster_size) ; // we can optimize it later 
+
     // Subscribers and Publisher // Topic subscribe to : rp_semantic/labels_pointcloud
     segnet_msg_sub = cl_handle.subscribe("/semantic_frame", 10, &ClustersPointClouds::frameCallback , this ); // Subscriber
-    clusters_msg_pub = cl_handle.advertise<rp_semantic::LabelClusters>("rp_semantic/labels_clusters", 10); // Publisher
+    clusters_msg_pub = cl_handle.advertise<rp_semantic::LabelClusters>("rp_semantic/labels_clusters", 10); // Publisher  
 }
 
 void ClustersPointClouds::frameCallback(const rp_semantic::Frame &msg){
@@ -79,7 +93,6 @@ void ClustersPointClouds::frameCallback(const rp_semantic::Frame &msg){
     pcl::PointCloud<pcl::PointXYZL>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZL> );          // Creating Pointcloud structured of type pcl::PointXYZL
     pcl::PCLPointCloud2 pcl_pc2;
     cv::Mat label_img;
-    int num_labels = 37 ; // we can optimize it later
     rp_semantic::LabelClusters msg_out;
 
     // Unpack sensor_msgs/Pointcloud2 in msg.raw_pointcloud into a pointcloud
@@ -164,9 +177,9 @@ void ClustersPointClouds::frameCallback(const rp_semantic::Frame &msg){
 
         std::vector<pcl::PointIndices> cluster_indices;
         pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
-        ec.setClusterTolerance (0.04); // 2cm
-        ec.setMinClusterSize (100);
-        ec.setMaxClusterSize (25000);
+        ec.setClusterTolerance (cluster_tolerance); // 2cm
+        ec.setMinClusterSize (min_cluster_size);
+        ec.setMaxClusterSize (max_cluster_size);
         ec.setSearchMethod (tree);
         ec.setInputCloud (cloud_filtered_labels);
         ec.extract (cluster_indices);

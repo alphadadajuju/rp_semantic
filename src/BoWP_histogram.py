@@ -13,7 +13,6 @@ from cv_bridge import CvBridge, CvBridgeError
 import sys
 import time
 import itertools
-
 import matplotlib.pyplot as plt
 
 from sensor_msgs.msg import Image
@@ -40,7 +39,7 @@ class BoWP_hist:
         # define class variables
         self.bridge = CvBridge()
         
-        self.num_class = 37
+        self.num_class = rospy.get_param("rp_semantic/BOWP_histogram/num_class",37) 
         tup = (1, )
         for i in range(2, self.num_class+1): # number of classes
             tup2 = (i, )
@@ -51,10 +50,10 @@ class BoWP_hist:
         self.bowp = np.zeros((self.num_class, self.num_class), dtype=np.float64)
         print('Number of word-pairs: ' + str(self.bowp.shape[0]))
 
-        self.wait_for_message = True
-        self.label_2d_ready = False
-        self.label_2d = None
-        self.label_cluster_msg = None
+        self.wait_for_message = rospy.get_param("rp_semantic/BOWP_histogram/wait_for_message",True) 
+        self.label_2d_ready = rospy.get_param("rp_semantic/BOWP_histogram/label_2d_ready",False)
+        self.label_2d = rospy.get_param("rp_semantic/BOWP_histogram/label_2d",None)
+        self.label_cluster_msg = rospy.get_param("rp_semantic/BOWP_histogram/label_cluster_ms",None)
         #print(self.pairs)
         #indices =  self.pairs.index((4,3))
         #print(indices)

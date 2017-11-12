@@ -1,6 +1,6 @@
 <launch>
     
-    <rosparam file="$(find rp_semantic)/config/rp_semantic_params.yaml" command="load" 
+    <rosparam file="$(find rp_semantic)/config/params_config.yaml" command="load" 
     <node pkg="rosbag" type="play" name="rosbag" args="/home/albert/rp_data/segnet1.bag"/>
     
     <!--node name="segnet_node" pkg="rp_semantic" type="semanticRGB_node.py" output="screen"/-->
