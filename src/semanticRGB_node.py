@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # ROS imports
-import roslib; roslib.load_manifest('segnet_program')
+import roslib; roslib.load_manifest('rp_semantic')
 import rospy
 import numpy as np
 import matplotlib.pyplot as plt
@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 from sensor_msgs.msg import Image
 from sensor_msgs.msg import PointCloud2
 from sensor_msgs.msg import CameraInfo
-from segnet_program.msg import Frame
+from rp_semantic.msg import Frame
 
 class SegnetSemantic:
     def __init__(self):
@@ -39,7 +39,7 @@ class SegnetSemantic:
         caffe_root = '/home/albert/GitHub/caffe-segnet-cudnn5/'
 
         # model_path = '/home/alpha/catkin_ws/src/segnet_program/src/'
-        model_path = '/home/albert/rp_data'
+        model_path = '/home/albert/rp_data/'
 
         # initialize segnet 
         sys.path.append('/usr/local/lib/python2.7/site-packages')
@@ -131,8 +131,6 @@ class SegnetSemantic:
         '''
         self.f_height = rgb_cam_msg.height
         self.f_width = rgb_cam_msg.width
-        print (self.f_height)
-        print (self.f_width)
 
 
     def controlLoop(self):

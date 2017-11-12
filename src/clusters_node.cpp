@@ -69,7 +69,7 @@ public:
 ClustersPointClouds::ClustersPointClouds(){
 
     // Subscribers and Publisher // Topic subscribe to : rp_semantic/labels_pointcloud
-    segnet_msg_sub = cl_handle.subscribe("/semantic_frame", 10, &ClustersPointClouds::frameCallback , this ); // Subscriber
+    segnet_msg_sub = cl_handle.subscribe("/rp_semantic/labels_pointcloud", 10, &ClustersPointClouds::frameCallback , this ); // Subscriber
     clusters_msg_pub = cl_handle.advertise<rp_semantic::LabelClusters>("rp_semantic/labels_clusters", 10); // Publisher
 }
 

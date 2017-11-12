@@ -28,7 +28,7 @@ class BoWPmatching:
         ### I/O
         self.bowp_subscriber = rospy.Subscriber("rp_semantic/bow_bowp_descriptors", BoWP, self.descriptor_callback)
 
-        self.base_path_output = os.path.expanduser('~/rp_semantic/') + str(rospy.Time.now().secs) + '_loop'
+        self.base_path_output = os.path.expanduser('~/rp_semantic/') + str(rospy.Time.now().secs) + '_loop/'
         if not os.path.exists(self.base_path_output):
             os.makedirs(self.base_path_output)
 
@@ -63,6 +63,8 @@ class BoWPmatching:
         self.mutex.acquire()
         self.last_message = msg
 
+        print("Received descriptors")
+
         # Todo modify message
         if False and self.bow_descriptors is not None and msg.node_id >= 0:
              # Update case
@@ -74,14 +76,11 @@ class BoWPmatching:
             self.t += 1
 
             # Store image associated with this node
-            '''
             try:
-                img = self.bridge.imgmsg_to_cv2(msg.raw_rgb, "rgb8")
-                self.node_images.append(img)
+                self.node_images.append(self.bridge.imgmsg_to_cv2(msg.raw_rgb, "rgb8"))
             except CvBridgeError, e:
                 rospy.loginfo("Conversion failed")
                 rospy.logerr(e)
-            '''
 
             if self.bow_descriptors.size == 0:
                 self.bow_descriptors_list = [list(msg.bow)]
@@ -210,15 +209,12 @@ class BoWPmatching:
         pass
 
     def store_node_and_closure(self, base_path, node_closure):
-        return
-
         image_name = str(self.t) + '_' + str(node_closure) + '.jpg'
 
         if node_closure != -1:
             img = np.concatenate((self.node_images[-1], self.node_images[node_closure]), axis=1)
         else:
-            width, height = cv2.cv.GetSize(self.node_images[-1])
-            img = np.concatenate((self.node_images[-1], 255 * np.ones((width, height))), axis=1)
+            img = np.concatenate((self.node_images[-1], 255 * np.ones(self.node_images[-1].shape)), axis=1)
 
         cv2.imwrite(self.base_path_output + image_name, img)
 

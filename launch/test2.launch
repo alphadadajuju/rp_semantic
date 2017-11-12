@@ -1,0 +1,8 @@
+<launch>
+    <node pkg="rosbag" type="play" name="rosbag" args="/home/albert/rp_data/kinect2.bag"/>
+
+    <node name="segnet_node" pkg="rp_semantic" type="semanticRGB_node.py"/>
+    <node name="clusters_node" pkg="rp_semantic" type="clusters_node" />
+    <node name="bowp_node" pkg="rp_semantic" type="BoWP_histogram.py" />
+    <node name="bowp_matching_node" pkg="rp_semantic" type="BoWP_matching.py" output="screen"/>
+</launch>
