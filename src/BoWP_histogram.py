@@ -159,11 +159,6 @@ class BoWP_hist:
         for i in range(0, num_cluster):
             for j in range(i, num_cluster):
                 if i != j:
-                    if self.label_cluster_msg.clusters[i].label == 1 or \
-                            self.label_cluster_msg.clusters[i].label == 2 or \
-                            self.label_cluster_msg.clusters[i].label == 22:
-                        continue
-
                     #print ('i:' + str(i))
                     #print ('j:' + str(j))
                     p2p_dist = ((self.label_cluster_msg.clusters[i].x - self.label_cluster_msg.clusters[j].x) ** 2 + (self.label_cluster_msg.clusters[i].y - self.label_cluster_msg.clusters[j].y) ** 2 + (self.label_cluster_msg.clusters[i].z - self.label_cluster_msg.clusters[j].z) ** 2) ** 0.5

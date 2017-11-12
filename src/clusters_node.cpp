@@ -151,6 +151,8 @@ void ClustersPointClouds::frameCallback(const rp_semantic::Frame &msg){
 
     // Extracting cluster for each labels
     for(int cl = 0 ; cl < num_labels ; cl ++ ){
+        if(cl == 1 || cl == 2 || cl == 22)
+            continue;
 
         // Create the filtering object
         pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered_labels(new pcl::PointCloud<pcl::PointXYZ> ); // Filtered point cloud of type pcl::PointXYZL
