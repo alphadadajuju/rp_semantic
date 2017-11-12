@@ -35,12 +35,12 @@ class BoWPmatching:
         self.bridge = CvBridge()
 
         ### CONFIGURABLE PARAMETERS
-        self.p = int(3)  # Frame margin for matching min of 6
-        self.DEBUG_MODE = False
-        self.OUTPUT_MODE = 'file'
-        self.dist_exponent = 1.0
-        self.posterior_thresh = 0.5
-        self.prior_neighbourhood = 2
+        self.p = int(rospy.get_param("rp_semantic/BOWP_matching/p",3))  # Frame margin for matching min of 6
+        self.DEBUG_MODE = rospy.get_param("rp_semantic/BOWP_matching/DEBUG_MODE",False)
+        self.OUTPUT_MODE = rospy.get_param("rp_semantic/BOWP_matching/OUTPUT_MODE",'file')
+        self.dist_exponent = rospy.get_param("rp_semantic/BOWP_matching/dist_exponent",1.0)
+        self.posterior_thresh = rospy.get_param("rp_semantic/BOWP_matching/posterior_thresh",0.5)
+        self.prior_neighbourhood = rospy.get_param("rp_semantic/BOWP_matching/prior_neighbourhood",2)
 
         ### Operation variables
         self.t = -1 # Timestep indication

@@ -71,14 +71,13 @@ class SegnetSemantic:
 
         self.bridge = CvBridge() # for decoding sensor_msgs Image data[]
         
-
         # define class variables
-        self.f_height = 0
-        self.f_width = 0 
-        self.wait_for_new_frame = True
-        self.rgb_has_fresh = False
-        self.pointcloud_has_fresh = False
-        self.node_id = 1;
+        self.f_height = rospy.get_param("rp_semantic/semanticRGB_node/f_height",0)
+        self.f_width = rospy.get_param("rp_semantic/semanticRGB_node/f_height",0) 
+        self.wait_for_new_frame = rospy.get_param("rp_semantic/semanticRGB_node/f_height",True)
+        self.rgb_has_fresh = rospy.get_param("rp_semantic/semanticRGB_node/f_height",False)
+        self.pointcloud_has_fresh = rospy.get_param("rp_semantic/semanticRGB_node/f_height",False)
+        self.node_id = rospy.get_param("rp_semantic/semanticRGB_node/f_height",1)
         self.frame_message = Frame()
         self.pointcloud_message = PointCloud2()
         self.rgb_message = Image()
