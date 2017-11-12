@@ -1,14 +1,17 @@
 #!/usr/bin/env python
 # license removed for brevity
 
+import os
+import cv2
+from threading import Thread, Lock
+import rospy
 import numpy as np
 import numpy.linalg as la
-import rospy
-from rp_semantic.msg import BoWP
-from threading import Thread, Lock
 from scipy.spatial.distance import cosine as cosine_dist
+from cv_bridge import CvBridge, CvBridgeError
 
-DEBUG_MODE = False
+from rp_semantic.msg import BoWP
+
 
 def gaussian(x, mu, sig):
     return np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
@@ -22,29 +25,43 @@ def angle_between(v1, v2):
 class BoWPmatching:
     def __init__(self):
         self.mutex = Lock()
-        # I/O
+        ### I/O
         self.bowp_subscriber = rospy.Subscriber("rp_semantic/bow_bowp_descriptors", BoWP, self.descriptor_callback)
 
+        self.base_path_output = os.path.expanduser('~/rp_semantic/') + str(rospy.Time.now().secs) + '_loop'
+        if not os.path.exists(self.base_path_output):
+            os.makedirs(self.base_path_output)
+
+        self.bridge = CvBridge()
+
+        ### CONFIGURABLE PARAMETERS
+        self.p = int(3)  # Frame margin for matching min of 6
+        self.DEBUG_MODE = False
+        self.OUTPUT_MODE = 'file'
+        self.dist_exponent = 1.0
+        self.posterior_thresh = 0.5
+        self.prior_neighbourhood = 2
+
+        ### Operation variables
         self.t = -1 # Timestep indication
-        self.p = int(3) # Frame margin for matching min of 6
+        self.previous_loop_closure_event = -1 # Bayesian filtering for temporal coherence
 
         ### Important variables
+        self.last_message = None
+        self.node_images = list([])
+
         # Descriptors are stored as (N_nodes x N_words) matrices
         self.bow_descriptors_list = []
         self.bowp_descriptors_list = []
-
         self.bow_descriptors = np.matrix([])
         self.bowp_descriptors = np.matrix([])
-
-        # Bayesian filtering for temporal coherence
-        self.prior_neighbourhood = 1
-        self.previous_loop_closure_event = -1
 
         print ('BoWP matching initialized:')
 
 
     def descriptor_callback(self, msg):
         self.mutex.acquire()
+        self.last_message = msg
 
         # Todo modify message
         if False and self.bow_descriptors is not None and msg.node_id >= 0:
@@ -55,6 +72,16 @@ class BoWPmatching:
             print("Received descriptors")
 
             self.t += 1
+
+            # Store image associated with this node
+            '''
+            try:
+                img = self.bridge.imgmsg_to_cv2(msg.raw_rgb, "rgb8")
+                self.node_images.append(img)
+            except CvBridgeError, e:
+                rospy.loginfo("Conversion failed")
+                rospy.logerr(e)
+            '''
 
             if self.bow_descriptors.size == 0:
                 self.bow_descriptors_list = [list(msg.bow)]
@@ -68,6 +95,9 @@ class BoWPmatching:
 
             if self.bow_descriptors.shape[0] > self.p+2:
                 self.previous_loop_closure_event = self.match_last_frame()
+
+                if self.OUTPUT_MODE is 'file':
+                    self.store_node_and_closure(self.base_path_output, self.previous_loop_closure_event)
 
             if self.previous_loop_closure_event != -1:
                 print("Loop closure between " + str(self.t) + " and " + str(self.previous_loop_closure_event))
@@ -100,19 +130,15 @@ class BoWPmatching:
             bowp_tfidf[i] = np.multiply(np.divide(self.bowp_descriptors[i], n_i_bowp[i]),
                                         np.log(N_bowp / (n_w_bowp + 1E-12)) )
 
-            #Normalize the tf-idf vectors
-            #bow_tfidf[i] = bow_tfidf[i]/np.sum(bow_tfidf[i])
-            #bowp_tfidf[i] = bow_tfidf[i]/np.sum(bowp_tfidf[i])
-
         #print("tfidf", bow_tfidf)
 
         bow_similarity_scores = np.zeros(bow_tfidf.shape[0] - 1 - self.p)
         bowp_similarity_scores = np.zeros(bowp_tfidf.shape[0] - 1 - self.p)
         for i in range(0, bow_tfidf.shape[0] - 1 - self.p):
-            bow_similarity_scores[i] = 1.0/np.power(cosine_dist(bow_tfidf[-1], bow_tfidf[i]) + 1E-12, 2.0)
-            bowp_similarity_scores[i] = 1.0/np.power(cosine_dist(bowp_tfidf[-1], bowp_tfidf[i]) + 1E-12, 2.0)
+            bow_similarity_scores[i] = 1.0/np.power(cosine_dist(bow_tfidf[-1], bow_tfidf[i]) + 1E-12, self.dist_exponent)
+            bowp_similarity_scores[i] = 1.0/np.power(cosine_dist(bowp_tfidf[-1], bowp_tfidf[i]) + 1E-12, self.dist_exponent)
 
-        if DEBUG_MODE:
+        if self.DEBUG_MODE:
             print("Similarity scores", bow_similarity_scores)
 
         ### Compute likelihood
@@ -123,15 +149,16 @@ class BoWPmatching:
         bowp_similarity_mean = np.mean(bowp_similarity_scores)
         bowp_similarity_stddev = np.std(bowp_similarity_scores)
 
+        bow_likelihood = np.ones(bow_similarity_scores.shape[0] + 1)
+        bowp_likelihood = np.ones(bow_similarity_scores.shape[0] + 1)
         joint_likelihood = np.zeros(bow_similarity_scores.shape[0] + 1)
         for i in range(0, bow_similarity_scores.shape[0]):
-            bow_likelihood, bowp_likelihood = 1, 1
             if bow_similarity_scores[i] > (bow_similarity_mean + bow_similarity_stddev):
-                bow_likelihood = (bow_similarity_scores[i] - bow_similarity_stddev) / bow_similarity_mean
+                bow_likelihood[i] = (bow_similarity_scores[i] - bow_similarity_stddev) / bow_similarity_mean
             if bowp_similarity_scores[i] > (bowp_similarity_mean + bowp_similarity_stddev):
-                bowp_likelihood = (bowp_similarity_scores[i] - bowp_similarity_stddev) / bowp_similarity_mean
+                bowp_likelihood[i] = (bowp_similarity_scores[i] - bowp_similarity_stddev) / bowp_similarity_mean
 
-            joint_likelihood[i] = bow_likelihood*bowp_likelihood
+            joint_likelihood[i] = bow_likelihood[i]*bowp_likelihood[i]
 
         # The likelihood of new node is encoded on the final entry
         joint_likelihood[-1] = ((bow_similarity_mean / bow_similarity_stddev) + 1) * \
@@ -140,18 +167,22 @@ class BoWPmatching:
         if(np.isnan(joint_likelihood[-1]) or np.isinf(joint_likelihood[-1])):
             joint_likelihood[-1] = 1
 
-        if DEBUG_MODE:
+        if self.DEBUG_MODE:
             print("Likelihood", joint_likelihood)
 
         ### Get posterior
         prior = self.compute_prior(joint_likelihood.shape[0], self.previous_loop_closure_event)
         posterior = np.multiply(joint_likelihood, prior)
-
-        if DEBUG_MODE:
+        if self.DEBUG_MODE:
             print("Posterior: ", posterior)
 
-        print("Posterior: ", posterior)
-        return np.argmax(posterior[:-1]) if np.amax(posterior[:-1]) > 0.5 else -1
+        if self.OUTPUT_MODE is 'file':
+            self.store_step_file(self.last_message,
+                                 bow_similarity_scores, bowp_similarity_scores,
+                                 bow_likelihood, bowp_likelihood, joint_likelihood,
+                                 prior, posterior)
+
+        return np.argmax(posterior[:-1]) if np.amax(posterior[:-1]) > self.posterior_thresh else -1
 
     def compute_prior(self, prior_size, previous_loop_closure):
         prior = np.zeros(prior_size)
@@ -175,7 +206,21 @@ class BoWPmatching:
         # print("prior", self.prior)
         return prior
 
+    def store_step_file(self, msg_in, bow_sim, bowp_sim, bow_l, bowp_l, joint_l, prior, posterior):
+        pass
 
+    def store_node_and_closure(self, base_path, node_closure):
+        return
+
+        image_name = str(self.t) + '_' + str(node_closure) + '.jpg'
+
+        if node_closure != -1:
+            img = np.concatenate((self.node_images[-1], self.node_images[node_closure]), axis=1)
+        else:
+            width, height = cv2.cv.GetSize(self.node_images[-1])
+            img = np.concatenate((self.node_images[-1], 255 * np.ones((width, height))), axis=1)
+
+        cv2.imwrite(self.base_path_output + image_name, img)
 
 if __name__ == '__main__':
     rospy.init_node("bowp_matching")
