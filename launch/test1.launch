@@ -1,6 +1,8 @@
 <launch>
+    
+    <rosparam file="$(find rp_semantic)/config/rp_semantic_params.yaml" command="load" 
     <node pkg="rosbag" type="play" name="rosbag" args="/home/albert/rp_data/segnet1.bag"/>
-
+    
     <!--node name="segnet_node" pkg="rp_semantic" type="semanticRGB_node.py" output="screen"/-->
     <node name="clusters_node" pkg="rp_semantic" type="clusters_node" />
     <node name="bowp_node" pkg="rp_semantic" type="BoWP_histogram.py" />
