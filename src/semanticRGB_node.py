@@ -35,11 +35,11 @@ class SegnetSemantic:
         
 
     def rosSetup(self):
-        # caffe_root = '/home/alpha/github/caffe-segnet-cudnn5/'
-        caffe_root = '/home/albert/GitHub/caffe-segnet-cudnn5/'
+        caffe_root = '/home/alpha/github/caffe-segnet-cudnn5/'
+        #caffe_root = '/home/albert/GitHub/caffe-segnet-cudnn5/'
 
-        # model_path = '/home/alpha/catkin_ws/src/segnet_program/src/'
-        model_path = '/home/albert/rp_data'
+        model_path = '/home/alpha/catkin_ws/src/segnet_program/src/'
+        #model_path = '/home/albert/rp_data'
 
         # initialize segnet 
         sys.path.append('/usr/local/lib/python2.7/site-packages')
