@@ -74,9 +74,9 @@ ClustersPointClouds::ClustersPointClouds(){
 
     // Initialization of variables
     num_labels = 37 ;
-    min_cluster_size = 0.04 ;
-    max_cluster_size = 100 ;
-    cluster_tolerance = 25000 ;
+    min_cluster_size = -1 ;
+    max_cluster_size = -1 ;
+    cluster_tolerance = -1 ;
     ros::param::get("rp_semantic/clusters_node/num_labels", num_labels) ; // we can optimize it later 
     ros::param::get("rp_semantic/clusters_node/cluster_tolerance", cluster_tolerance) ; // we can optimize it later 
     ros::param::get("rp_semantic/clusters_node/min_cluster_size", min_cluster_size) ; // we can optimize it later 
