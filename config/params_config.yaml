@@ -1,0 +1,31 @@
+## YAML FILE for package "rp_semantic".
+
+# CONFIGURABLE PARAMETERS SemanticRGB_node.py 
+rp_semantic/semanticRGB_node/f_height : 0
+rp_semantic/semanticRGB_node/f_width : 0 
+rp_semantic/semanticRGB_node/wait_for_new_frame : True
+rp_semantic/semanticRGB_node/rgb_has_fresh : False
+rp_semantic/semanticRGB_node/pointcloud_has_fresh : False
+rp_semantic/semanticRGB_node/node_id : 1
+
+# CONFIGURABLE PARAMETERS clusters_node.cpp
+rp_semantic/clusters_node/num_labels : 37  
+rp_semantic/clusters_node/cluster_tolerance : 0.04 
+rp_semantic/clusters_node/min_cluster_size : 100
+rp_semantic/clusters_node/max_cluster_size : 25000 
+
+# CONFIGURABLE PARAMETERS BOWP_matching.py 
+rp_semantic/BOWP_matching/p : 3  # Frame margin for matching min of 6
+rp_semantic/BOWP_matching/DEBUG_MODE : False
+rp_semantic/BOWP_matching/OUTPUT_MODE : 'file'
+rp_semantic/BOWP_matching/dist_exponent : 1.0
+rp_semantic/BOWP_matching/posterior_thresh : 0.5
+rp_semantic/BOWP_matching/prior_neighbourhood : 2
+
+
+# CONFIGURABLE PARAMETERS BOWP_histogram
+rp_semantic/BOWP_histogram/num_class : 37
+rp_semantic/BOWP_histogram/wait_for_message : True
+rp_semantic/BOWP_histogram/label_2d_ready : False
+rp_semantic/BOWP_histogram/label_2d : None
+rp_semantic/BOWP_histogram/label_cluster_msg : None

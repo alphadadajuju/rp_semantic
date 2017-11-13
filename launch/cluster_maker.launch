@@ -1,6 +1,6 @@
 <launch>
 
-
-  <node name="clusters_node" pkg="rp_semantic" type="clusters_node" output="screen"/>
+    <rosparam file="$(find rp_semantic)/config/params_config.yaml" command="load"/>
+    <node name="clusters_node" pkg="rp_semantic" type="clusters_node" output="screen"/>
    
 </launch>

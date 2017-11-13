@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # ROS imports
-import roslib; roslib.load_manifest('segnet_program')
+import roslib; roslib.load_manifest('rp_semantic')
 import rospy
 import numpy as np
 import matplotlib.pyplot as plt
@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 from sensor_msgs.msg import Image
 from sensor_msgs.msg import PointCloud2
 from sensor_msgs.msg import CameraInfo
-from segnet_program.msg import Frame
+from rp_semantic.msg import Frame
 
 class SegnetSemantic:
     def __init__(self):
@@ -71,14 +71,13 @@ class SegnetSemantic:
 
         self.bridge = CvBridge() # for decoding sensor_msgs Image data[]
         
-
         # define class variables
-        self.f_height = 0
-        self.f_width = 0 
-        self.wait_for_new_frame = True
-        self.rgb_has_fresh = False
-        self.pointcloud_has_fresh = False
-        self.node_id = 1;
+        self.f_height = rospy.get_param("rp_semantic/semanticRGB_node/f_height",0)
+        self.f_width = rospy.get_param("rp_semantic/semanticRGB_node/f_height",0) 
+        self.wait_for_new_frame = rospy.get_param("rp_semantic/semanticRGB_node/f_height",True)
+        self.rgb_has_fresh = rospy.get_param("rp_semantic/semanticRGB_node/f_height",False)
+        self.pointcloud_has_fresh = rospy.get_param("rp_semantic/semanticRGB_node/f_height",False)
+        self.node_id = rospy.get_param("rp_semantic/semanticRGB_node/f_height",1)
         self.frame_message = Frame()
         self.pointcloud_message = PointCloud2()
         self.rgb_message = Image()
@@ -131,8 +130,6 @@ class SegnetSemantic:
         '''
         self.f_height = rgb_cam_msg.height
         self.f_width = rgb_cam_msg.width
-        print (self.f_height)
-        print (self.f_width)
 
 
     def controlLoop(self):
