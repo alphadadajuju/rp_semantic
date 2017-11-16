@@ -16,7 +16,6 @@ find_package(catkin REQUIRED COMPONENTS
   cv_bridge
   pcl_conversions
   pcl_ros
-  
 )
 
 ## System dependencies are found with CMake's conventions
@@ -144,6 +143,12 @@ include_directories(
 add_executable(clusters_node src/clusters_node.cpp)
 target_link_libraries(clusters_node ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
 add_dependencies(clusters_node rp_semantic_generate_messages_cpp)
+
+
+add_executable(fusion_node src/fusion_node.cpp)
+target_link_libraries(fusion_node ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
+add_dependencies(fusion_node rp_semantic_generate_messages_cpp)
+
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
