@@ -1,5 +1,6 @@
 // ROS
 #include <ros/ros.h>
+#include <tf/transform_broadcaster.h>
 
 // ROS messages
 #include <std_msgs/Int16.h>
@@ -48,10 +49,12 @@
 // OpenCV 
 #include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
+#include <image_geometry/pinhole_camera_model.h>
 #include <sensor_msgs/image_encodings.h>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
+#include <Eigen/Geometry>
 
 
 using namespace std;
@@ -126,7 +129,7 @@ private:
     ros::NodeHandle nh;         // node handler
     ros::Publisher marker_pub ;   // Clusters node Message Publisher
     ros::Publisher pc_display_pub ;   // Clusters node Message Publisher
-
+    ros::Publisher image_pub ;   // Clusters node Message Publisher
 public:
     SemanticFusion();
     bool loadPlaceData(const string &base_path, pcl::PointCloud<pcl::PointXYZRGB> &pc, vector<Eigen::Matrix4f> &poses, vector<string> &images);
@@ -144,7 +147,7 @@ SemanticFusion::SemanticFusion(){
 
     pc_display_pub = nh.advertise<sensor_msgs::PointCloud2>("rp_semantic/fusion_pointcloud", 10); // Publisher
     marker_pub = nh.advertise<visualization_msgs::Marker>("rp_semantic/camera_pose", 10); // Publisher
-
+    image_pub = nh.advertise<sensor_msgs::Image>("rp_semantic/camera_image", 10); // Publisher
 
     // Initialization of variables
     //num_labels = 37 ;
@@ -292,41 +295,98 @@ void SemanticFusion::createFusedSemanticMap(const pcl::PointCloud<pcl::PointXYZR
     fc.setVerticalFOV (46.6);
     fc.setHorizontalFOV (58.5);
     fc.setNearPlaneDistance (0.8);
-    fc.setFarPlaneDistance (8); //Should be 4m. but we bump it up a little
+    fc.setFarPlaneDistance (6); //Should be 4m. but we bump it up a little
 
+    // Initialization of P
+    Eigen::Matrix4f P;
+    P << 525.0, 0.0, 319.5, 0.0, 0.0, 525.0, 239.5, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0;
 
     // For each pose & image
     for (int i = 0; i < poses.size(); ++i) {
+        if(!ros::ok()) break;
+
         // FrustrumCulling from poses-> indices of visible points
         fc.setCameraPose(poses[i]);
-
         std::vector<int> inside_indices;
         fc.filter(inside_indices);
 
         // SRV: request image labelling through segnet
+        cv::Mat cv_img = cv::imread(images[i], CV_LOAD_IMAGE_COLOR);
+
+        Eigen::Matrix4f rviz2cv = Eigen::Matrix4f::Identity(4,4);
+        Eigen::Matrix3f r;
+        r = Eigen::AngleAxisf((float) 0.0f, Eigen::Vector3f::UnitZ())
+            * Eigen::AngleAxisf((float) -0.5f*M_PI, Eigen::Vector3f::UnitY())
+            * Eigen::AngleAxisf((float) 0.5f*M_PI, Eigen::Vector3f::UnitX());
+        rviz2cv.topLeftCorner(3,3) = r;
 
         // Get camera matrix from poses_i and K
+        Eigen::Matrix4f pose_inv = poses[i].inverse();
+        Eigen::Matrix4f world2pix = P * rviz2cv * pose_inv;
 
-        for (int j = 0; j < inside_indices.size(); ++j) {
+        //Create "Z buffer" emulator
+        bool has_been_projected[640][480] = { false };
+
+        pcl::PointCloud<pcl::PointXYZRGB> pc_disp(pc);
+        for(std::vector<int>::iterator it = inside_indices.begin(); it != inside_indices.end(); it++){
             // Backproject points using camera matrix (discard out of range)
+            Eigen::Vector4f point_w(pc_disp.points[*it].x, pc_disp.points[*it].y, pc_disp.points[*it].z, 1.0);
+            Eigen::Vector4f point_px = world2pix * point_w;
+            if(point_px(2) == 0){ point_px(2) +=1; } // Adapt homogenous for 4x4 efficient multiplication
 
-            // Get associated distributions, multiply distributions together and renormalize
+            int pix_x = std::round(point_px(0)/point_px(2));
+            int pix_y = std::round(point_px(1)/point_px(2));
 
+            if(pix_x < 0 || pix_x >= 640 || pix_y < 0 || pix_y >= 480)
+                continue;
 
+            if(!has_been_projected[pix_x][pix_y]){
+                // Get associated distributions, multiply distributions together and renormalize
+                cv::Vec3b color = cv_img.at<cv::Vec3b>(cv::Point(pix_x, pix_y));
+                pc_disp.points[*it].r = color.val[0];
+                pc_disp.points[*it].g = color.val[1];
+                pc_disp.points[*it].b = color.val[2];
+
+                has_been_projected[pix_x][pix_y] = true;
+            }
         }
 
+        sensor_msgs::ImagePtr image_msg = cv_bridge::CvImage(std_msgs::Header(),
+                                                             "rgb8", cv_img).toImageMsg();
+        image_pub.publish(image_msg);
+
+        displayCameraMarker(poses[i]);
+        displayPointcloud(pc_disp);
+        ros::Duration(0.4).sleep();
     }
 
 
 }
 
 /*
+ *         Eigen::Matrix4f rviz_rot = Eigen::Matrix4f::Identity(4,4);
+        Eigen::Matrix3f r;
+        r = Eigen::AngleAxisf((float) -M_PI*0.5, Eigen::Vector3f::UnitZ())
+            * Eigen::AngleAxisf((float) 0.0, Eigen::Vector3f::UnitY())
+            * Eigen::AngleAxisf((float) -M_PI, Eigen::Vector3f::UnitX());
+        rviz_rot.topLeftCorner(3,3) = r;
+
+        Eigen::Matrix4f rviz_inv = Eigen::Matrix4f::Identity(4,4);
+        rviz_inv(2,2) = -1;
+        Eigen::Matrix4f rviz2cv = rviz_rot;
+
+        Eigen::Matrix4f world2cam = P *  poses[i] * rviz2cv;
+
+        Eigen::Matrix4f cam2world = Eigen::Matrix4f::Identity(4,4);
+        world2cam.topLeftCorner(3,3) = cam2world.topLeftCorner(3,3).transpose();
+        world2cam.topRightCorner(3,1) = -world2cam.topLeftCorner(3,3)*cam2world.topRightCorner(3,1);
+ */
+
+/*
 void SemanticFusion::createFusedSemanticMap(const pcl::PointCloud<pcl::PointXYZRGB> &pc,
                                             const vector<Eigen::Matrix4f> &poses, const vector<string> &images) {
 
-    // Initialize label probability structure
-    vector<float> label_prob_init(37, 1.0f/37.0f);
-    std::vector<vector<float> > label_prob(pc.points.size(), label_prob_init);
+
 
     // Initialize other objects
     pcl::FrustumCulling<pcl::PointXYZRGB> fc;
@@ -432,13 +492,7 @@ int main(int argc, char **argv)
 
     sem_fusion.loadPlaceData(base_path, pc, poses, images);
     ros::Duration(1.0).sleep();
-
-    //sem_fusion.displayPointcloud(pc);
-    for (int i = 0; i < poses.size(); ++i) {
-        sem_fusion.testFrustrum(pc, poses[i]);
-        sem_fusion.displayCameraMarker(poses[i]);
-        ros::Duration(0.6).sleep();
-    }
+    sem_fusion.createFusedSemanticMap(pc, poses, images);
 
     ros::spin();
     return 0 ;
