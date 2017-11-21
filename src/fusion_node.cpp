@@ -130,16 +130,15 @@ private:
     ros::Publisher marker_pub ;   // Clusters node Message Publisher
     ros::Publisher pc_display_pub ;   // Clusters node Message Publisher
     ros::Publisher image_pub ;   // Clusters node Message Publisher
-public:
-    SemanticFusion();
-    bool loadPlaceData(const string &base_path, pcl::PointCloud<pcl::PointXYZRGB> &pc, vector<Eigen::Matrix4f> &poses, vector<string> &images);
-    void createFusedSemanticMap(const pcl::PointCloud<pcl::PointXYZRGB> &pc, const vector<Eigen::Matrix4f> &poses, const vector<string> &images);
+
     void displayCameraMarker(Eigen::Matrix4f cam_pose);
     void displayPointcloud(const pcl::PointCloud<pcl::PointXYZRGB> &pc);
 
-    //void frameCallback(const rp_semantic::Frame &msg);
-    void testworld2pixel();
-    void testFrustrum(const pcl::PointCloud<pcl::PointXYZRGB> &pc, const Eigen::Matrix4f &cam_pose);
+public:
+    SemanticFusion();
+
+    bool loadPlaceData(const string &base_path, pcl::PointCloud<pcl::PointXYZRGB> &pc, vector<Eigen::Matrix4f> &poses, vector<string> &images);
+    void createFusedSemanticMap(const pcl::PointCloud<pcl::PointXYZRGB> &pc, const vector<Eigen::Matrix4f> &poses, const vector<string> &images);
 };
 
 
@@ -157,101 +156,6 @@ SemanticFusion::SemanticFusion(){
     // Subscribers and Publisher // Topic subscribe to : rp_semantic/labels_pointcloud
     //segnet_msg_sub = nh.subscribe("/rp_semantic/labels_pointcloud", 10, &SemanticFusion::frameCallback , this ); // Subscriber
     //clusters_msg_pub = nh.advertise<rp_semantic::LabelClusters>("rp_semantic/labels_clusters", 10); // Publisher
-}
-
-
-
-
-void SemanticFusion::testFrustrum(const pcl::PointCloud<pcl::PointXYZRGB> &pc, const Eigen::Matrix4f &cam_pose){
-
-    // Filter points with frustrum object
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr pc2(new pcl::PointCloud<pcl::PointXYZRGB>);
-
-    pcl::FrustumCulling<pcl::PointXYZRGB> fc;
-    fc.setVerticalFOV (46.6);
-    fc.setHorizontalFOV (58.5);
-    fc.setNearPlaneDistance (0.8);
-    fc.setFarPlaneDistance (4);
-
-    fc.setInputCloud (pc.makeShared());
-    fc.setCameraPose(cam_pose);
-    fc.filter(*pc2);
-
-    //Send
-    displayPointcloud(*pc2);
-}
-
-
-void SemanticFusion::testworld2pixel(){
-    // Create uniformly spreaded pointcloud
-    pcl::PointCloud<pcl::PointXYZ>::Ptr pc1(new pcl::PointCloud<pcl::PointXYZ>);
-
-    float step = 0.1; //10cm.
-
-    for (float j = -5; j < 5; j += step)
-        for (float k = -5; k < 5; k += step)
-            pc1->points.push_back(pcl::PointXYZ(j,k,5));
-
-
-    std::vector<int> inside_indices;
-
-    pcl::FrustumCulling<pcl::PointXYZ> fc;
-    fc.setInputCloud (pc1);
-    fc.setVerticalFOV (46.6);
-    fc.setHorizontalFOV (58.5);
-    fc.setNearPlaneDistance (0.8);
-    fc.setFarPlaneDistance (10);
-    fc.filter(inside_indices);
-
-    // Initialize intrinsic camera matrix from kinect camera_info
-    Eigen::Matrix4f P;
-    P << 525.0, 0.0, 319.5, 0.0, 0.0, 525.0, 239.5, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0;
-
-    Eigen::Matrix3f K;
-    K << 525.0, 0.0, 319.5, 0.0, 525.0, 239.5, 0.0, 0.0, 1.0;
-
-/*
-         # Given a 3D point [X Y Z]', the projection (x, y) of the point onto
-        #  the rectified image is given by:
-        #  [u v w]' = P * [X Y Z 1]'
-        #         x = u / w
-        #         y = v / w
-        #  This holds for both images of a stereo pair.
-         */
-
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr pc2(new pcl::PointCloud<pcl::PointXYZRGB>);
-
-    for(pcl::PointCloud<pcl::PointXYZ>::iterator it = pc1->begin(); it != pc1->end(); it++){
-        Eigen::Vector3f point_world(it->x, it->y, it->z);
-
-        Eigen::Vector3f point_pixel = K * point_world;
-        point_pixel /= point_pixel(2);
-
-        int pix_x = point_pixel(0);
-        int pix_y = point_pixel(1);
-
-        pcl::PointXYZRGB p;
-        p.x = it->x;
-        p.y = it->y;
-        p.z = it->z;
-        p.r = (uchar) std::min(std::max(0, (int) 255*pix_y/480), 255); //y
-        p.g = 0; //(uchar) std::min(std::max(0, (int) 255*pix_x/640), 255); //255.0*point_pixel(0)/640.0; //x
-        p.b = 0;
-
-        pc2->points.push_back(p);
-    }
-
-    //Send
-    sensor_msgs::PointCloud2 pc_disp_msg;
-    pcl::toROSMsg(*pc2, pc_disp_msg);
-    //pcl_conversions::copyPCLPointCloud2MetaData(pcl_pc2, pc_disp_msg);
-    pc_disp_msg.header.frame_id = "map";
-
-    while(ros::ok()){
-        pc_display_pub.publish(pc_disp_msg);
-        ros::Duration(0.5).sleep();
-    }
-
 }
 
 bool
@@ -295,7 +199,7 @@ void SemanticFusion::createFusedSemanticMap(const pcl::PointCloud<pcl::PointXYZR
     fc.setVerticalFOV (46.6);
     fc.setHorizontalFOV (58.5);
     fc.setNearPlaneDistance (0.8);
-    fc.setFarPlaneDistance (6); //Should be 4m. but we bump it up a little
+    fc.setFarPlaneDistance (8); //Should be 4m. but we bump it up a little
 
     // Initialization of P
     Eigen::Matrix4f P;
@@ -307,17 +211,17 @@ void SemanticFusion::createFusedSemanticMap(const pcl::PointCloud<pcl::PointXYZR
 
         // FrustrumCulling from poses-> indices of visible points
         fc.setCameraPose(poses[i]);
-        std::vector<int> inside_indices;
+        std::vector<int> inside_indices; // Indices of points in pc_gray inside camera frustrum at pose[i]
         fc.filter(inside_indices);
 
         // SRV: request image labelling through segnet
-        cv::Mat cv_img = cv::imread(images[i], CV_LOAD_IMAGE_COLOR);
+
 
         Eigen::Matrix4f rviz2cv = Eigen::Matrix4f::Identity(4,4);
         Eigen::Matrix3f r;
-        r = Eigen::AngleAxisf((float) 0.0f, Eigen::Vector3f::UnitZ())
-            * Eigen::AngleAxisf((float) -0.5f*M_PI, Eigen::Vector3f::UnitY())
-            * Eigen::AngleAxisf((float) 0.5f*M_PI, Eigen::Vector3f::UnitX());
+        r = Eigen::AngleAxisf(0.0f, Eigen::Vector3f::UnitZ())
+            * Eigen::AngleAxisf( -0.5f*M_PI, Eigen::Vector3f::UnitY())
+            * Eigen::AngleAxisf( 0.5f*M_PI, Eigen::Vector3f::UnitX());
         rviz2cv.topLeftCorner(3,3) = r;
 
         // Get camera matrix from poses_i and K
@@ -327,10 +231,9 @@ void SemanticFusion::createFusedSemanticMap(const pcl::PointCloud<pcl::PointXYZR
         //Create "Z buffer" emulator
         bool has_been_projected[640][480] = { false };
 
-        pcl::PointCloud<pcl::PointXYZRGB> pc_disp(pc);
         for(std::vector<int>::iterator it = inside_indices.begin(); it != inside_indices.end(); it++){
             // Backproject points using camera matrix (discard out of range)
-            Eigen::Vector4f point_w(pc_disp.points[*it].x, pc_disp.points[*it].y, pc_disp.points[*it].z, 1.0);
+            Eigen::Vector4f point_w(pc.points[*it].x, pc.points[*it].y, pc.points[*it].z, 1.0);
             Eigen::Vector4f point_px = world2pix * point_w;
             if(point_px(2) == 0){ point_px(2) +=1; } // Adapt homogenous for 4x4 efficient multiplication
 
@@ -342,87 +245,13 @@ void SemanticFusion::createFusedSemanticMap(const pcl::PointCloud<pcl::PointXYZR
 
             if(!has_been_projected[pix_x][pix_y]){
                 // Get associated distributions, multiply distributions together and renormalize
-                cv::Vec3b color = cv_img.at<cv::Vec3b>(cv::Point(pix_x, pix_y));
-                pc_disp.points[*it].r = color.val[0];
-                pc_disp.points[*it].g = color.val[1];
-                pc_disp.points[*it].b = color.val[2];
 
-                has_been_projected[pix_x][pix_y] = true;
             }
         }
-
-        sensor_msgs::ImagePtr image_msg = cv_bridge::CvImage(std_msgs::Header(),
-                                                             "rgb8", cv_img).toImageMsg();
-        image_pub.publish(image_msg);
-
-        displayCameraMarker(poses[i]);
-        displayPointcloud(pc_disp);
-        ros::Duration(0.4).sleep();
     }
 
 
 }
-
-/*
- *         Eigen::Matrix4f rviz_rot = Eigen::Matrix4f::Identity(4,4);
-        Eigen::Matrix3f r;
-        r = Eigen::AngleAxisf((float) -M_PI*0.5, Eigen::Vector3f::UnitZ())
-            * Eigen::AngleAxisf((float) 0.0, Eigen::Vector3f::UnitY())
-            * Eigen::AngleAxisf((float) -M_PI, Eigen::Vector3f::UnitX());
-        rviz_rot.topLeftCorner(3,3) = r;
-
-        Eigen::Matrix4f rviz_inv = Eigen::Matrix4f::Identity(4,4);
-        rviz_inv(2,2) = -1;
-        Eigen::Matrix4f rviz2cv = rviz_rot;
-
-        Eigen::Matrix4f world2cam = P *  poses[i] * rviz2cv;
-
-        Eigen::Matrix4f cam2world = Eigen::Matrix4f::Identity(4,4);
-        world2cam.topLeftCorner(3,3) = cam2world.topLeftCorner(3,3).transpose();
-        world2cam.topRightCorner(3,1) = -world2cam.topLeftCorner(3,3)*cam2world.topRightCorner(3,1);
- */
-
-/*
-void SemanticFusion::createFusedSemanticMap(const pcl::PointCloud<pcl::PointXYZRGB> &pc,
-                                            const vector<Eigen::Matrix4f> &poses, const vector<string> &images) {
-
-
-
-    // Initialize other objects
-    pcl::FrustumCulling<pcl::PointXYZRGB> fc;
-    fc.setInputCloud ( pc.makeShared() );
-    // Set frustrum according to Kinect specifications
-    fc.setVerticalFOV (46.6);
-    fc.setHorizontalFOV (58.5);
-    fc.setNearPlaneDistance (0.8);
-    fc.setFarPlaneDistance (8); //Should be 4m. but we bump it up a little
-
-
-    // For each pose & image
-    for (int i = 0; i < poses.size(); ++i) {
-        // FrustrumCulling from poses-> indices of visible points
-        fc.setCameraPose(poses[i]);
-
-        std::vector<int> inside_indices;
-        fc.filter(inside_indices);
-
-        // SRV: request image labelling through segnet
-
-        // Get camera matrix from poses_i and K
-
-        for (int j = 0; j < inside_indices.size(); ++j) {
-            // Backproject points using camera matrix (discard out of range)
-
-            // Get associated distributions, multiply distributions together and renormalize
-
-
-        }
-
-    }
-
-
-}
-*/
 
 void SemanticFusion::displayCameraMarker(Eigen::Matrix4f cam_pose) {
     visualization_msgs::Marker marker;
@@ -469,11 +298,9 @@ void SemanticFusion::displayPointcloud(const pcl::PointCloud<pcl::PointXYZRGB> &
 
 /*
  # Given a 3D point [X Y Z]', the projection (x, y) of the point onto
-#  the rectified image is given by:
 #  [u v w]' = P * [X Y Z 1]'
 #         x = u / w
 #         y = v / w
-#  This holds for both images of a stereo pair.
 
 for(pcl::PointCloud<pcl::PointXYZRGB>::iterator it = pc1->begin(); it != pc1->end(); it++){
     //cout << it->x << ", " << it->y << ", " << it->z << endl;
