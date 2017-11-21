@@ -41,11 +41,11 @@ class SegnetSemantic:
 
     def rosSetup(self):
 
-        caffe_root = '/home/alpha/github/caffe-segnet-cudnn5/'
-        #caffe_root = '/home/albert/GitHub/caffe-segnet-cudnn5/'
+        #caffe_root = '/home/alpha/github/caffe-segnet-cudnn5/'
+        caffe_root = '/home/albert/GitHub/caffe-segnet-cudnn5/'
 
-        model_path = '/home/alpha/catkin_ws/src/segnet_program/src/'
-        #model_path = '/home/albert/rp_data'
+        #model_path = '/home/alpha/catkin_ws/src/segnet_program/src/'
+        model_path = '/home/albert/rp_data/'
 
         # initialize segnet 
         sys.path.append('/usr/local/lib/python2.7/site-packages')
@@ -81,9 +81,9 @@ class SegnetSemantic:
 
         # class variable initialization
         self.rgb_frame = None
-        self.height = 360
-        self.width = 480
-        self.num_class = 10
+        self.height = 480
+        self.width = 640
+        self.num_class = 37
 
         self.bridge = CvBridge() # for decoding sensor_msgs Image data[]
 
@@ -96,15 +96,15 @@ class SegnetSemantic:
 
         # initialize based on multiarrayLayout definition (see online)
         self.class_response.layout.data_offset = 0
-        self.class_response.layout.dim[0].label = "height"
-        self.class_response.layout.dim[0].size = self.height
+        self.class_response.layout.dim[0].label = "class"
+        self.class_response.layout.dim[0].size = self.num_class
         self.class_response.layout.dim[0].stride = self.num_class * self.width * self.height
         self.class_response.layout.dim[1].label = "width"
         self.class_response.layout.dim[1].size = self.width
-        self.class_response.layout.dim[1].stride = self.num_class * self.width
-        self.class_response.layout.dim[2].label = "class"
-        self.class_response.layout.dim[2].size = self.num_class
-        self.class_response.layout.dim[2].stride = self.num_class
+        self.class_response.layout.dim[1].stride = self.width * self.height
+        self.class_response.layout.dim[2].label = "height"
+        self.class_response.layout.dim[2].size = self.height
+        self.class_response.layout.dim[2].stride = self.height
 
         self.dstride1 = self.class_response.layout.dim[1].stride 
         self.dstride2 = self.class_response.layout.dim[2].stride 
@@ -115,6 +115,8 @@ class SegnetSemantic:
         # flags to exchange processed data between service handler and main control loop (faster!)
         self.wait_for_segnet = False
         self.obtain_rgb = False
+
+
     def handle_rgb_to_label_prob(self, req):
 
         print 'receive a request!'
@@ -197,10 +199,37 @@ class SegnetSemantic:
                 print '%30s' % 'Executed SegNet in ', str((end - start) * 1000), 'ms'
                 print 'filling in class prob!'
                 start = time.time()
+
+                '''
                 for row in range(0, self.height):
                     for col in range(0, self.width):
                         for cl in range (0,self.num_class):
-                            self.class_response.data[self.dstride1*row + self.dstride2*col + cl] = self.net.blobs['conv1_1_D'].data[:,cl+1,row,col]
+                            self.class_response.data[self.dstride1*row + self.dstride2*col + cl] = self.net.blobs['conv1_1_D'].data[:,cl+1,row,col]            
+                '''
+
+                # Global range normalization
+                segnet_prob_out = self.net.blobs['conv1_1_D'].data.squeeze()
+                segnet_prob_out = segnet_prob_out[1:, :, :]
+                segnet_prob_out = np.transpose(segnet_prob_out, axes=(0,2,1))
+
+
+                segnet_prob_out_max = np.amax(segnet_prob_out)
+                segnet_prob_out_min = np.amin(segnet_prob_out)
+                segnet_prob_out = (segnet_prob_out-segnet_prob_out_min)/(segnet_prob_out_max - segnet_prob_out_min)
+
+                # Sum to 1 prob distribution normalization
+                segnet_pix_sum = np.sum(segnet_prob_out, axis=0)
+                for cl in range(0, self.num_class):
+                    segnet_prob_out[cl,:,:] = np.divide(segnet_prob_out[cl,:,:], segnet_pix_sum)
+
+
+                segnet_reshaped_prob_out = np.zeros((self.num_class, self.width, self.height))
+                for cl in range(0, self.num_class):
+                    segnet_reshaped_prob_out[cl,:,:] = cv2.resize(segnet_prob_out[cl,:,:], (self.height, self.width), interpolation=cv2.INTER_NEAREST)
+
+                # Reshape and make msg
+                self.class_response.data = np.reshape(segnet_reshaped_prob_out, segnet_reshaped_prob_out.size, 'F')
+
                 end = time.time()
                 print '%30s' % 'Executed multiarray in ', str((end - start) * 1000), 'ms'
                 print 'multiarray filled!'

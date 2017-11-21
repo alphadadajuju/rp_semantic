@@ -6,10 +6,13 @@
 #include <std_msgs/Int16.h>
 #include "std_msgs/String.h"
 #include "visualization_msgs/Marker.h"
+#include "std_msgs/Float64MultiArray.h"
+
 #include "rp_semantic/Cluster.h"
 #include "rp_semantic/LabelClusters.h"
 #include "rp_semantic/Frame.h"
 
+#include "rp_semantic/RGB2LabelProb.h"
 
 // Headers C_plus_plus
 #include <iostream>
@@ -129,7 +132,10 @@ private:
     ros::NodeHandle nh;         // node handler
     ros::Publisher marker_pub ;   // Clusters node Message Publisher
     ros::Publisher pc_display_pub ;   // Clusters node Message Publisher
-    ros::Publisher image_pub ;   // Clusters node Message Publisher
+    ros::Publisher image_pub;
+    ros::Publisher fused_pc_pub ;   // Clusters node Message Publisher
+
+    ros::ServiceClient segnet_client;
 
     void displayCameraMarker(Eigen::Matrix4f cam_pose);
     void displayPointcloud(const pcl::PointCloud<pcl::PointXYZRGB> &pc);
@@ -146,7 +152,10 @@ SemanticFusion::SemanticFusion(){
 
     pc_display_pub = nh.advertise<sensor_msgs::PointCloud2>("rp_semantic/fusion_pointcloud", 10); // Publisher
     marker_pub = nh.advertise<visualization_msgs::Marker>("rp_semantic/camera_pose", 10); // Publisher
-    image_pub = nh.advertise<sensor_msgs::Image>("rp_semantic/camera_image", 10); // Publisher
+    fused_pc_pub = nh.advertise<sensor_msgs::PointCloud2>("rp_semantic/semantic_fused_pc", 10); // Publisher
+    image_pub = nh.advertise<sensor_msgs::Image>("rp_semantic/camera_image", 10);
+
+    segnet_client = nh.serviceClient<rp_semantic::RGB2LabelProb>("rgb_to_label_prob");
 
     // Initialization of variables
     //num_labels = 37 ;
@@ -206,7 +215,13 @@ void SemanticFusion::createFusedSemanticMap(const pcl::PointCloud<pcl::PointXYZR
     P << 525.0, 0.0, 319.5, 0.0, 0.0, 525.0, 239.5, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0;
 
     // For each pose & image
+    cv::Mat label2bgr = cv::imread("/home/albert/rp_data/sun.png", CV_LOAD_IMAGE_COLOR);
+    sensor_msgs::ImagePtr rgb2label_msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", label2bgr).toImageMsg();
+    image_pub.publish(rgb2label_msg);
+
     for (int i = 0; i < poses.size(); ++i) {
+        ROS_INFO_STREAM_THROTTLE(3, "Processing node " << i << "/" << poses.size());
+
         if(!ros::ok()) break;
 
         // FrustrumCulling from poses-> indices of visible points
@@ -215,6 +230,16 @@ void SemanticFusion::createFusedSemanticMap(const pcl::PointCloud<pcl::PointXYZR
         fc.filter(inside_indices);
 
         // SRV: request image labelling through segnet
+        cv::Mat cv_img = cv::imread(images[i], CV_LOAD_IMAGE_COLOR);
+        sensor_msgs::ImagePtr image_msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv_img).toImageMsg();
+
+        rp_semantic::RGB2LabelProb srv_msg;
+        srv_msg.request.rgb_image = *image_msg.get();
+        segnet_client.call(srv_msg);
+
+        std_msgs::Float64MultiArray frame_label_probs(srv_msg.response.image_class_probability);
+        int dim_stride_1 = frame_label_probs.layout.dim[1].stride;
+        int dim_stride_2 = frame_label_probs.layout.dim[2].stride;
 
 
         Eigen::Matrix4f rviz2cv = Eigen::Matrix4f::Identity(4,4);
@@ -245,10 +270,65 @@ void SemanticFusion::createFusedSemanticMap(const pcl::PointCloud<pcl::PointXYZR
 
             if(!has_been_projected[pix_x][pix_y]){
                 // Get associated distributions, multiply distributions together and renormalize
+                //multiarray(i,j,k) = data[data_offset + dim_stride[1]*i + dim_stride[2]*j + k]
 
+                // Multiply each element of the distribution and Get the sum of the final distribution
+                float dist_sum = 0.0;
+                for (int cl = 0; cl < 37; ++cl) {
+                    label_prob[*it][cl] *= frame_label_probs.data[dim_stride_1*cl + dim_stride_2*pix_x + pix_y];
+                    dist_sum += label_prob[*it][cl];
+                }
+
+                // Divide each element by the sum
+                for (int cl = 0; cl < 37; ++cl) {
+                    label_prob[*it][cl] *= 1/dist_sum;
+                }
             }
         }
-    }
+
+        // Build XYZL pointcloud
+        pcl::PointCloud<pcl::PointXYZL> labelled_pc;
+        for(int i = 0; i < pc.points.size(); i++) {
+            pcl::PointXYZL p;
+            p.x = pc.points[i].x;
+            p.y = pc.points[i].y;
+            p.z = pc.points[i].z;
+
+            uint16_t max_label = 0;
+            float max_label_prob = 0.0;
+            for (uint16_t cl = 0; cl < 37; ++cl) {
+                if(label_prob[i][cl] > max_label_prob){
+                    max_label = cl;
+                    max_label_prob = label_prob[i][cl];
+                }
+            }
+
+            p.label = max_label;
+
+            labelled_pc.push_back(p);
+        }
+
+
+        // DEBUG:: Build XYZRGB pointcloud
+        pcl::PointCloud<pcl::PointXYZRGB> label_rgb_pc;
+        for(int i = 0; i < labelled_pc.points.size(); i++) {
+            pcl::PointXYZRGB p;
+            p.x = labelled_pc.points[i].x;
+            p.y = labelled_pc.points[i].y;
+            p.z = labelled_pc.points[i].z;
+
+            cv::Vec3b color = label2bgr.at<cv::Vec3b>(cv::Point(labelled_pc.points[i].label, 0));
+            p.b = color.val[0];
+            p.g = color.val[1];
+            p.r = color.val[2];
+
+            label_rgb_pc.push_back(p);
+        }
+
+        displayPointcloud(label_rgb_pc);
+        displayCameraMarker(poses[i]);
+    }// For each pose
+
 
 
 }
