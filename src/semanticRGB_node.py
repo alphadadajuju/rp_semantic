@@ -60,6 +60,7 @@ class SegnetSemantic:
         self.net = caffe.Net(model, weights, caffe.TEST)
         
         self.input_shape = self.net.blobs['data'].data.shape # 1 x 3 x 224 z 224
+        print 'network input shape',self.input_shape
         self.output_shape = self.net.blobs['argmax'].data.shape # 1 x 1 x 224 z 224
         colours_img = cv2.imread(colours)
 
@@ -108,7 +109,8 @@ class SegnetSemantic:
         # all print statements should use a rospy.log_ form, don't print!
                 rospy.loginfo("Conversion failed")
         
-            self.rgb_frame = cv2.resize(self.rgb_frame, (self.input_shape[3], self.input_shape[2]))
+            self.rgb_frame = cv2.resize(self.rgb_frame, (self.input_shape[3], self.input_shape[2])) # cv2 resize opposite from np resize
+            #print 'rgb frame shape', self.rgb_frame.shape
             self.rgb_has_fresh = True
             self.rgb_message = rgb_msg
             #print('shape' + str(self.rgb_frame.shape))
@@ -137,7 +139,7 @@ class SegnetSemantic:
             #print('pointcloud:' + str(self.pointcloud_has_fresh))
 
             if self.rgb_has_fresh is True and self.pointcloud_has_fresh is True: #and self.pointcloud_has_fresh is True:
-                print ('enter main control loop')
+                
                 self.wait_for_new_frame = False
 
                 #plt.figure(1) # resized input simage
@@ -146,7 +148,7 @@ class SegnetSemantic:
 
                 input_image = self.rgb_frame.transpose((2, 0, 1))
                 input_image = np.asarray([input_image])
-                print('shape' + str(input_image.shape))
+                #print 'input image shape', input_image.shape
                 # run through Segnet
                 if input_image.shape[3] != self.input_shape[3]:
                     self.rgb_has_fresh = False
@@ -157,11 +159,14 @@ class SegnetSemantic:
                     start = time.time()
                     out = self.net.forward_all(data=input_image)
                     end = time.time()
+                    #print 'argmax:',  self.net.blobs['argmax'].data
+                    
+                    for i in range (0, 38):
                     #print (self.net.blobs['argmax'].data.shape) # 1 x 1 x 224 x 224
-                    #print (self.net.blobs['conv1_1_D'].data.shape) #(1, 38, 224, 224); can access probability at 'conv1_1_D' per class per pixel 1 x 38 x 224 x 224
+                        print 'prob at 0 0:', i,  self.net.blobs['conv1_1_D'].data[:,i,0,0] #(1, 38, 224, 224); can access probability at 'conv1_1_D' per class per pixel 1 x 38 x 224 x 224
                     #(3, 1, 224, 224) for 'argmax'; out is a 'dict' having only key 'dict'
 
-            
+                    print 'label at 0 0:', self.net.blobs['argmax'].data[:,:,0,0]
                     segmentation_ind = np.squeeze(self.net.blobs['argmax'].data) # squeeze removes dim = 1 (1x3x24 => 3x24)
                     segmentation_ind_3ch = np.resize(segmentation_ind, (3, self.input_shape[2], self.input_shape[3]))
                     segmentation_ind_3ch = segmentation_ind_3ch.transpose(1, 2, 0).astype(np.uint8)
@@ -179,7 +184,7 @@ class SegnetSemantic:
 
                     self.frame_message.node_id = self.node_id
                     self.node_id += 1
-                    print ('shape of image:' + str(segmentation_ind.shape))
+                    
                     self.frame_message.label = self.bridge.cv2_to_imgmsg(np.uint8(segmentation_ind), "mono8")
                     self.frame_message.raw_rgb = self.rgb_message
                     self.frame_message.raw_pointcloud = self.pointcloud_message
@@ -187,19 +192,19 @@ class SegnetSemantic:
 
                     # for debug
                     #print ('shape of label message: ' + str(self.frame_message.label))
+                    '''
                     self.test = self.bridge.imgmsg_to_cv2(self.frame_message.label, "mono8")
                     if np.any(self.test > 38):
                         print('bad news')
                         print(self.test)
                     else:
                         print("good news")
+                    '''
 
                     self.rgb_has_fresh = False
                     self.pointcloud_has_fresh = False
                     self.wait_for_new_frame = True
                     
-
-                    print ('end of main control loop')
                 
             
             
