@@ -128,11 +128,15 @@ class ClusterVis:
     def marker_sphere(self):
         num_cluster = np.shape(self.label_cluster.clusters)[0]
         print (str(num_cluster) + ' clusters in this frame')
-        '''
+        
         m_delete  = Marker()
-        marker.action = marker.DELETEALL
-        self.sphere_pub.publish(m_delete)
-        '''
+        m_delete.header.frame_id = "/camera_rgb_optical_frame"
+        m_delete.action = m_delete.DELETEALL
+        
+        m_deletearray = MarkerArray()
+        m_deletearray.markers.append(m_delete)
+        self.sphere_pub.publish(m_deletearray)
+        
 
         self.markerArray = MarkerArray()
         for i in range(0, num_cluster):
@@ -144,7 +148,7 @@ class ClusterVis:
             marker.scale.y = self.label_cluster.clusters[i].radius
             marker.scale.z = self.label_cluster.clusters[i].radius
             
-            marker.color.a = 1.0
+            marker.color.a = 0.6
             '''
             marker.color.r = 0.5
             marker.color.g = 0.0
