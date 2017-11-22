@@ -22,6 +22,7 @@
 #include <sstream>
 #include <cmath>
 #include <limits>
+#include <float.h>
 #include "boost/filesystem.hpp"
 
 // PCL
@@ -151,14 +152,16 @@ public:
 
 
 SemanticFusion::SemanticFusion(){
-    debug_mode = false;
+    debug_mode = true;
 
     pc_display_pub = nh.advertise<sensor_msgs::PointCloud2>("rp_semantic/fusion_pointcloud", 10); // Publisher
     marker_pub = nh.advertise<visualization_msgs::Marker>("rp_semantic/camera_pose", 10); // Publisher
     fused_pc_pub = nh.advertise<sensor_msgs::PointCloud2>("rp_semantic/semantic_fused_pc", 10); // Publisher
     image_pub = nh.advertise<sensor_msgs::Image>("rp_semantic/camera_image", 10);
 
+    ros::service::waitForService("rgb_to_label_prob", 10);
     segnet_client = nh.serviceClient<rp_semantic::RGB2LabelProb>("rgb_to_label_prob");
+    ros::Duration(4).sleep();
 
     // Initialization of variables
     //num_labels = 37 ;
@@ -211,7 +214,7 @@ void SemanticFusion::createFusedSemanticMap(const pcl::PointCloud<pcl::PointXYZR
     fc.setVerticalFOV (46.6);
     fc.setHorizontalFOV (58.5);
     fc.setNearPlaneDistance (0.8);
-    fc.setFarPlaneDistance (8); //Should be 4m. but we bump it up a little
+    fc.setFarPlaneDistance (6); //Should be 4m. but we bump it up a little
 
     // Initialization of P
     Eigen::Matrix4f P;
@@ -241,6 +244,7 @@ void SemanticFusion::createFusedSemanticMap(const pcl::PointCloud<pcl::PointXYZR
         int dim_stride_2 = frame_label_probs.layout.dim[2].stride;
 
 
+        //Create matrix to go from RVIZ depth camera frame to CV rgb camera frame
         Eigen::Matrix4f rviz2cv = Eigen::Matrix4f::Identity(4,4);
         Eigen::Matrix3f r;
         r = Eigen::AngleAxisf(0.0f, Eigen::Vector3f::UnitZ())
@@ -248,12 +252,18 @@ void SemanticFusion::createFusedSemanticMap(const pcl::PointCloud<pcl::PointXYZR
             * Eigen::AngleAxisf( 0.5f*M_PI, Eigen::Vector3f::UnitX());
         rviz2cv.topLeftCorner(3,3) = r;
 
+        Eigen::Matrix4f depth2optical = Eigen::Matrix4f::Identity(4,4);
+        depth2optical(0,3) = -0.025; //-0.025
+
         // Get camera matrix from poses_i and K
         Eigen::Matrix4f pose_inv = poses[i].inverse();
-        Eigen::Matrix4f world2pix = P * rviz2cv * pose_inv;
+        Eigen::Matrix4f world2pix = P * depth2optical * rviz2cv * pose_inv;
 
         //Create "Z buffer" emulator
-        bool has_been_projected[640][480] = { false };
+        int pixel_point_proj[480][640];
+        float pixel_point_dist[480][640];
+        fill_n(&pixel_point_proj[0][0], sizeof(pixel_point_proj) / sizeof(**pixel_point_proj), -1);
+        fill_n(&pixel_point_dist[0][0], sizeof(pixel_point_dist) / sizeof(**pixel_point_dist), FLT_MAX);
 
         for(std::vector<int>::iterator it = inside_indices.begin(); it != inside_indices.end(); it++){
             // Backproject points using camera matrix (discard out of range)
@@ -267,23 +277,41 @@ void SemanticFusion::createFusedSemanticMap(const pcl::PointCloud<pcl::PointXYZR
             if(pix_x < 0 || pix_x >= 640 || pix_y < 0 || pix_y >= 480)
                 continue;
 
-            if(!has_been_projected[pix_x][pix_y]){
-                // Get associated distributions, multiply distributions together and renormalize
-                //multiarray(i,j,k) = data[data_offset + dim_stride[1]*i + dim_stride[2]*j + k]
+            //Compute distance from camera position to point position
+            Eigen::Vector3f cam_position(poses[i](0,3), poses[i](1,3), poses[i](2,3));
+            Eigen::Vector3f point_position(pc.points[*it].x, pc.points[*it].y, pc.points[*it].z);
+            Eigen::Vector3f cam_point_vec = cam_position - point_position;
+            float cam_point_dist = cam_point_vec.norm();
+
+            //Check against tables and keep closest point's index
+            if(cam_point_dist < pixel_point_dist[pix_y][pix_x]){
+                pixel_point_proj[pix_y][pix_x] = *it;
+                pixel_point_dist[pix_y][pix_x] = cam_point_dist;
+            }
+        }
+
+
+        //Get associated distributions, multiply  distributions together and renormalize
+        for (int y = 0; y < 480; ++y) {
+            for (int x = 0; x < 640; ++x) {
+                if(pixel_point_proj[y][x] == -1){
+                    continue;
+                }
+
+                //Get idx of nearest projected point from pointcloud
+                int pc_idx = pixel_point_proj[y][x];
 
                 // Multiply each element of the distribution and Get the sum of the final distribution
-                float dist_sum = 0.0;
+                float prob_dist_sum = 0.0;
                 for (int cl = 0; cl < 37; ++cl) {
-                    label_prob[*it][cl] *= frame_label_probs.data[dim_stride_1*pix_y + dim_stride_2*pix_x + cl];
-                    dist_sum += label_prob[*it][cl];
+                    label_prob[pc_idx][cl] *= frame_label_probs.data[dim_stride_1*y + dim_stride_2*x + cl];
+                    prob_dist_sum += label_prob[pc_idx][cl];
                 }
 
                 // Divide each element by the sum
                 for (int cl = 0; cl < 37; ++cl) {
-                    label_prob[*it][cl] *= 1/dist_sum;
+                    label_prob[pc_idx][cl] *= 1/prob_dist_sum;
                 }
-
-                has_been_projected[pix_x][pix_y] = true;
             }
         }
 
@@ -328,7 +356,7 @@ void SemanticFusion::createFusedSemanticMap(const pcl::PointCloud<pcl::PointXYZR
                 p.y = labelled_pc.points[i].y;
                 p.z = labelled_pc.points[i].z;
 
-                if(labelled_pc.points[i].label == 38){
+                if(labelled_pc.points[i].label > 37){
                     p.b = 0;
                     p.g = 0;
                     p.r = 0;
