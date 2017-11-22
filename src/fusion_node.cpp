@@ -137,6 +137,8 @@ private:
 
     ros::ServiceClient segnet_client;
 
+    bool debug_mode;
+
     void displayCameraMarker(Eigen::Matrix4f cam_pose);
     void displayPointcloud(const pcl::PointCloud<pcl::PointXYZRGB> &pc);
 
@@ -149,6 +151,7 @@ public:
 
 
 SemanticFusion::SemanticFusion(){
+    debug_mode = false;
 
     pc_display_pub = nh.advertise<sensor_msgs::PointCloud2>("rp_semantic/fusion_pointcloud", 10); // Publisher
     marker_pub = nh.advertise<visualization_msgs::Marker>("rp_semantic/camera_pose", 10); // Publisher
@@ -215,10 +218,6 @@ void SemanticFusion::createFusedSemanticMap(const pcl::PointCloud<pcl::PointXYZR
     P << 525.0, 0.0, 319.5, 0.0, 0.0, 525.0, 239.5, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0;
 
     // For each pose & image
-    cv::Mat label2bgr = cv::imread("/home/albert/rp_data/sun.png", CV_LOAD_IMAGE_COLOR);
-    sensor_msgs::ImagePtr rgb2label_msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", label2bgr).toImageMsg();
-    image_pub.publish(rgb2label_msg);
-
     for (int i = 0; i < poses.size(); ++i) {
         ROS_INFO_STREAM_THROTTLE(3, "Processing node " << i << "/" << poses.size());
 
@@ -275,7 +274,7 @@ void SemanticFusion::createFusedSemanticMap(const pcl::PointCloud<pcl::PointXYZR
                 // Multiply each element of the distribution and Get the sum of the final distribution
                 float dist_sum = 0.0;
                 for (int cl = 0; cl < 37; ++cl) {
-                    label_prob[*it][cl] *= frame_label_probs.data[dim_stride_1*cl + dim_stride_2*pix_x + pix_y];
+                    label_prob[*it][cl] *= frame_label_probs.data[dim_stride_1*pix_y + dim_stride_2*pix_x + cl];
                     dist_sum += label_prob[*it][cl];
                 }
 
@@ -283,6 +282,8 @@ void SemanticFusion::createFusedSemanticMap(const pcl::PointCloud<pcl::PointXYZR
                 for (int cl = 0; cl < 37; ++cl) {
                     label_prob[*it][cl] *= 1/dist_sum;
                 }
+
+                has_been_projected[pix_x][pix_y] = true;
             }
         }
 
@@ -294,8 +295,8 @@ void SemanticFusion::createFusedSemanticMap(const pcl::PointCloud<pcl::PointXYZR
             p.y = pc.points[i].y;
             p.z = pc.points[i].z;
 
-            uint16_t max_label = 0;
-            float max_label_prob = 0.0;
+            uint16_t max_label = 38;
+            float max_label_prob = 1.0f/37.0f;
             for (uint16_t cl = 0; cl < 37; ++cl) {
                 if(label_prob[i][cl] > max_label_prob){
                     max_label = cl;
@@ -308,29 +309,43 @@ void SemanticFusion::createFusedSemanticMap(const pcl::PointCloud<pcl::PointXYZR
             labelled_pc.push_back(p);
         }
 
+        sensor_msgs::PointCloud2 pc_fused_msg;
+        pcl::toROSMsg(labelled_pc, pc_fused_msg);
+        pc_fused_msg.header.frame_id = "map";
+        fused_pc_pub.publish(pc_fused_msg);
 
-        // DEBUG:: Build XYZRGB pointcloud
-        pcl::PointCloud<pcl::PointXYZRGB> label_rgb_pc;
-        for(int i = 0; i < labelled_pc.points.size(); i++) {
-            pcl::PointXYZRGB p;
-            p.x = labelled_pc.points[i].x;
-            p.y = labelled_pc.points[i].y;
-            p.z = labelled_pc.points[i].z;
 
-            cv::Vec3b color = label2bgr.at<cv::Vec3b>(cv::Point(labelled_pc.points[i].label, 0));
-            p.b = color.val[0];
-            p.g = color.val[1];
-            p.r = color.val[2];
+        if(debug_mode){
+            cv::Mat label2bgr = cv::imread("/home/albert/rp_data/sun.png", CV_LOAD_IMAGE_COLOR);
+            sensor_msgs::ImagePtr rgb2label_msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", label2bgr).toImageMsg();
+            image_pub.publish(rgb2label_msg);
 
-            label_rgb_pc.push_back(p);
+            // DEBUG:: Build XYZRGB pointcloud
+            pcl::PointCloud<pcl::PointXYZRGB> label_rgb_pc;
+            for(int i = 0; i < labelled_pc.points.size(); i++) {
+                pcl::PointXYZRGB p;
+                p.x = labelled_pc.points[i].x;
+                p.y = labelled_pc.points[i].y;
+                p.z = labelled_pc.points[i].z;
+
+                if(labelled_pc.points[i].label == 38){
+                    p.b = 0;
+                    p.g = 0;
+                    p.r = 0;
+                }else{
+                    cv::Vec3b color = label2bgr.at<cv::Vec3b>(cv::Point(labelled_pc.points[i].label+1, 0));
+                    p.b = color.val[0];
+                    p.g = color.val[1];
+                    p.r = color.val[2];
+                }
+
+                label_rgb_pc.push_back(p);
+            }
+
+            displayPointcloud(label_rgb_pc);
+            displayCameraMarker(poses[i]);
         }
-
-        displayPointcloud(label_rgb_pc);
-        displayCameraMarker(poses[i]);
     }// For each pose
-
-
-
 }
 
 void SemanticFusion::displayCameraMarker(Eigen::Matrix4f cam_pose) {

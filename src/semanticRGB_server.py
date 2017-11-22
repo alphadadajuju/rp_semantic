@@ -96,15 +96,15 @@ class SegnetSemantic:
 
         # initialize based on multiarrayLayout definition (see online)
         self.class_response.layout.data_offset = 0
-        self.class_response.layout.dim[0].label = "class"
-        self.class_response.layout.dim[0].size = self.num_class
-        self.class_response.layout.dim[0].stride = self.num_class * self.width * self.height
+        self.class_response.layout.dim[0].label = "height"
+        self.class_response.layout.dim[0].size = self.height
+        self.class_response.layout.dim[0].stride = self.height * self.width * self.num_class
         self.class_response.layout.dim[1].label = "width"
         self.class_response.layout.dim[1].size = self.width
-        self.class_response.layout.dim[1].stride = self.width * self.height
-        self.class_response.layout.dim[2].label = "height"
-        self.class_response.layout.dim[2].size = self.height
-        self.class_response.layout.dim[2].stride = self.height
+        self.class_response.layout.dim[1].stride = self.width * self.num_class
+        self.class_response.layout.dim[2].label = "class"
+        self.class_response.layout.dim[2].size = self.num_class
+        self.class_response.layout.dim[2].stride = self.num_class
 
         self.dstride1 = self.class_response.layout.dim[1].stride 
         self.dstride2 = self.class_response.layout.dim[2].stride 
@@ -210,33 +210,40 @@ class SegnetSemantic:
                 # Global range normalization
                 segnet_prob_out = self.net.blobs['conv1_1_D'].data.squeeze()
                 segnet_prob_out = segnet_prob_out[1:, :, :]
-                segnet_prob_out = np.transpose(segnet_prob_out, axes=(0,2,1))
-
+                segnet_prob_out = np.transpose(segnet_prob_out, axes=(1,2,0))
 
                 segnet_prob_out_max = np.amax(segnet_prob_out)
                 segnet_prob_out_min = np.amin(segnet_prob_out)
                 segnet_prob_out = (segnet_prob_out-segnet_prob_out_min)/(segnet_prob_out_max - segnet_prob_out_min)
 
                 # Sum to 1 prob distribution normalization
-                segnet_pix_sum = np.sum(segnet_prob_out, axis=0)
+                segnet_pix_sum = np.sum(segnet_prob_out, axis=2)
                 for cl in range(0, self.num_class):
-                    segnet_prob_out[cl,:,:] = np.divide(segnet_prob_out[cl,:,:], segnet_pix_sum)
+                    segnet_prob_out[:,:,cl] = np.divide(segnet_prob_out[:,:,cl], segnet_pix_sum)
 
 
-                segnet_reshaped_prob_out = np.zeros((self.num_class, self.width, self.height))
+                segnet_reshaped_prob_out = np.zeros((self.height, self.width, self.num_class))
                 for cl in range(0, self.num_class):
-                    segnet_reshaped_prob_out[cl,:,:] = cv2.resize(segnet_prob_out[cl,:,:], (self.height, self.width), interpolation=cv2.INTER_NEAREST)
+                    segnet_reshaped_prob_out[:,:,cl] = cv2.resize(segnet_prob_out[:,:,cl], (self.width, self.height), interpolation=cv2.INTER_NEAREST)
 
                 # Reshape and make msg
-                self.class_response.data = np.reshape(segnet_reshaped_prob_out, segnet_reshaped_prob_out.size, 'F')
+                self.class_response.data = np.reshape(segnet_reshaped_prob_out, segnet_reshaped_prob_out.size, 'C')
+
+                '''
+                for row in range(0, self.height):
+                    for col in range(0, self.width):
+                        for cl in range(0, self.num_class):
+                            self.class_response.data[self.dstride1 * row + self.dstride2 * col + cl] = \
+                                segnet_reshaped_prob_out[row, col, cl]
+                '''
 
                 end = time.time()
                 print '%30s' % 'Executed multiarray in ', str((end - start) * 1000), 'ms'
                 print 'multiarray filled!'
                 self.wait_for_segnet = False
 
-                
-            
+
+
 
 if __name__ == '__main__':
 
@@ -244,7 +251,7 @@ if __name__ == '__main__':
     caffe.set_device(0) # set gpu device
 
     rospy.init_node( 'semanticRGB_server', log_level=rospy.INFO)
-  
+
     seg_node = SegnetSemantic()
 
     seg_node.start()
