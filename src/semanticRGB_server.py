@@ -69,7 +69,7 @@ class SegnetSemantic:
         self.output_shape = self.net.blobs['argmax'].data.shape # 1 x 1 x 224 z 224
         
         # no need for color info; will remove this soon
-        '''
+        
         colours_img = cv2.imread(colours)
 
 
@@ -77,8 +77,7 @@ class SegnetSemantic:
             exit()
   
         self.label_colours = colours_img.astype(np.uint8)
-        '''
-
+        
         # class variable initialization
         self.rgb_frame = None
         self.height = 480
@@ -116,6 +115,11 @@ class SegnetSemantic:
         self.wait_for_segnet = False
         self.obtain_rgb = False
 
+        # publisher
+        self.semantic_rgb_frame_pub = rospy.Publisher('/rp_semantic/semantic_rgb_frame', Image, queue_size=1) # change topic's name accordingly
+        self.rgb_frame_pub = rospy.Publisher('/rp_semantic/rgb_frame', Image,
+                                             queue_size=1)  # change topic's name accordingly
+        self.semantic_label_message = Image()
 
     def handle_rgb_to_label_prob(self, req):
 
@@ -135,6 +139,8 @@ class SegnetSemantic:
             while self.wait_for_segnet is True: # main control loop still processing segnet and wrapping multiarray
                 pass
 
+            self.semantic_rgb_frame_pub.publish(self.semantic_label_message)
+            self.rgb_frame_pub.publish(req.rgb_image)
             return RGB2LabelProbResponse(self.class_response)
         '''
         self.rgb_frame = cv2.resize(self.rgb_frame, (self.input_shape[3], self.input_shape[2]))
@@ -240,6 +246,18 @@ class SegnetSemantic:
                 end = time.time()
                 print '%30s' % 'Executed multiarray in ', str((end - start) * 1000), 'ms'
                 print 'multiarray filled!'
+
+                segmentation_ind = np.squeeze(self.net.blobs['argmax'].data) # squeeze removes dim = 1 (1x3x24 => 3x24)
+                segmentation_ind_3ch = np.resize(segmentation_ind, (3, self.input_shape[2], self.input_shape[3]))
+                segmentation_ind_3ch = segmentation_ind_3ch.transpose(1, 2, 0).astype(np.uint8)
+                segmentation_rgb = np.zeros(segmentation_ind_3ch.shape, dtype=np.uint8)
+                cv2.LUT(segmentation_ind_3ch, self.label_colours, segmentation_rgb)
+                 
+
+                segmentation_rgb = segmentation_rgb.astype(np.uint8) 
+                print segmentation_rgb
+                self.semantic_label_message = self.bridge.cv2_to_imgmsg(np.uint8(segmentation_rgb), "bgr8")
+
                 self.wait_for_segnet = False
 
 

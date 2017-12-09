@@ -1,0 +1,22 @@
+<launch>
+
+    <arg name="dir" default="/" />
+    <arg name="load_labelled" default="false" />
+    <arg name="debug" default="true" />
+
+    <param name="dir" value="$(arg dir)"/>
+    <param name="load_labelled" value="$(arg load_labelled)"/>
+    <param name="debug" value="$(arg debug)"/>
+
+    <rosparam file="$(find rp_semantic)/config/params_config.yaml" command="load"/>
+
+    <group unless="$(arg load_labelled)">
+        <node name="semanticRGB_server" pkg="rp_semantic" type="semanticRGB_server.py"/>
+    </group>
+
+
+    <node name="fusion_node" pkg="rp_semantic" type="fusion_node" output="screen"/>
+    <node name="cluster_visualization" pkg="rp_semantic" type="cluster_visualization.py" />
+
+    <node name="clusters_node" pkg="rp_semantic" type="clusters_node" output="screen"/>
+</launch>

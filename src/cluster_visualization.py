@@ -44,6 +44,7 @@ class ClusterVis:
         self.label_cluster_ready = False
         self.wait_for_message = True
         colours = '/home/alpha/catkin_ws/src/segnet_program/src/sun.png'
+        colours = '/home/albert/rp_data/sun.png'
         colours_img = cv2.imread(colours)
         '''
         b,g,r = cv2.split(colours_img)       # get b,g,r
@@ -74,7 +75,8 @@ class ClusterVis:
         if self.wait_for_message == True:
             self.label_cluster = label_cluster_msg
             #self.node_id = self.label_cluster.node_id
-            
+
+            '''
             try:
                 # bgr8 is the pixel encoding -- 8 bits per color, organized as blue/green/red
                 self.label_2d = self.bridge.imgmsg_to_cv2(self.label_cluster.labels, "mono8")
@@ -85,6 +87,7 @@ class ClusterVis:
             except CvBridgeError, e:
                 # all print statements should use a rospy.log_ form, don't print!
                 rospy.loginfo("Conversion failed")
+            '''
             
             self.label_cluster_ready = True
             self.wait_for_message = False
@@ -98,17 +101,20 @@ class ClusterVis:
         #print (self.label_2d_ready)
         if self.label_cluster_ready is True:
             self.label_cluster_ready = False
+
+            # Create spheres and put them in self.markerArray
             self.marker_sphere()
-            rgb_im = self.label2rgb()
-            self.labels_image = self.bridge.cv2_to_imgmsg(np.uint8(rgb_im), "bgr8")
-            self.rgb_image = self.label_cluster.raw_rgb
-            self.pointcloud = self.label_cluster.raw_pointcloud
+
+            #rgb_im = self.label2rgb()
+            #self.labels_image = self.bridge.cv2_to_imgmsg(np.uint8(rgb_im), "bgr8")
+            #self.rgb_image = self.label_cluster.raw_rgb
+            #self.pointcloud = self.label_cluster.raw_pointcloud
 
             print('number of markers drawmn:' + str(np.shape(self.markerArray.markers)[0]))
             self.sphere_pub.publish(self.markerArray)
-            self.label2d_pub.publish(self.labels_image)
-            self.pointcloud_pub.publish(self.pointcloud)
-            self.rgb_pub.publish(self.rgb_image)
+            #self.label2d_pub.publish(self.labels_image)
+            #self.pointcloud_pub.publish(self.pointcloud)
+            #self.rgb_pub.publish(self.rgb_image)
 
 
             self.wait_for_message = True
@@ -130,7 +136,7 @@ class ClusterVis:
         print (str(num_cluster) + ' clusters in this frame')
         
         m_delete  = Marker()
-        m_delete.header.frame_id = "/camera_rgb_optical_frame"
+        m_delete.header.frame_id = "/map"
         m_delete.action = m_delete.DELETEALL
         
         m_deletearray = MarkerArray()
@@ -141,14 +147,14 @@ class ClusterVis:
         self.markerArray = MarkerArray()
         for i in range(0, num_cluster):
             marker = Marker()
-            marker.header.frame_id = "/camera_rgb_optical_frame"
+            marker.header.frame_id = "/map"
             marker.type = marker.SPHERE
             marker.action = marker.ADD
-            marker.scale.x = self.label_cluster.clusters[i].radius
-            marker.scale.y = self.label_cluster.clusters[i].radius
-            marker.scale.z = self.label_cluster.clusters[i].radius
+            marker.scale.x = self.label_cluster.clusters[i].radius*2.0
+            marker.scale.y = self.label_cluster.clusters[i].radius*2.0
+            marker.scale.z = self.label_cluster.clusters[i].radius*2.0
             
-            marker.color.a = 0.6
+            marker.color.a = 0.4
             '''
             marker.color.r = 0.5
             marker.color.g = 0.0
@@ -159,10 +165,14 @@ class ClusterVis:
             marker.pose.position.x = self.label_cluster.clusters[i].x
             marker.pose.position.y = self.label_cluster.clusters[i].y
             marker.pose.position.z = self.label_cluster.clusters[i].z
-            cluster_label = self.label_cluster.clusters[i].label
-            marker.color.r = round(self.label_colours[0][cluster_label][2] / 255.0, 1)
-            marker.color.g = round(self.label_colours[0][cluster_label][1] / 255.0, 1)
-            marker.color.b = round(self.label_colours[0][cluster_label][0] / 255.0, 1)
+            cluster_label = int(self.label_cluster.clusters[i].label)
+
+            if cluster_label > 36:
+                continue
+
+            marker.color.r = round(self.label_colours[0][cluster_label+1][2] / 255.0, 1)
+            marker.color.g = round(self.label_colours[0][cluster_label+1][1] / 255.0, 1)
+            marker.color.b = round(self.label_colours[0][cluster_label+1][0] / 255.0, 1)
             
             '''
             print('r:' + str(marker.color.r))

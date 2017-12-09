@@ -1,2 +1,2 @@
-float[] bow
-float[] bowp
+float32[] bow
+float32[] bowp

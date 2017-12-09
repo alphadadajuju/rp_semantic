@@ -1,0 +1,8 @@
+<launch>
+
+    <rosparam file="$(find rp_semantic)/config/params_config.yaml" command="load"/>
+
+    <node name="BoWP_place_matching" pkg="rp_semantic" type="BoWP_place_matching.py" output="screen" />
+
+    <node name="place_desc_publisher" pkg="rp_semantic" type="place_desc_publisher.py" output="screen"/>
+</launch>

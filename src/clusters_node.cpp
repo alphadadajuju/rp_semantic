@@ -9,7 +9,7 @@
 #include "rp_semantic/LabelClusters.h"
 #include "rp_semantic/Frame.h"
 #include "rp_semantic/BoWP.h"
-//#include "rp_semantic/BoWPDescriptors.h"
+#include "rp_semantic/BoWPDescriptors.h"
 
 // Headers C_plus_plus
 #include <iostream>
@@ -18,7 +18,7 @@
 #include <sstream>
 #include <cmath>
 #include <limits>
-#include <algorithm> 
+#include <algorithm>
 #include <vector>
 
 // PCL
@@ -58,6 +58,7 @@ using namespace std;
 class ClustersPointClouds{
 
 private:
+    bool visualize_clusters;
 
     int num_labels ;
     int min_cluster_size ;
@@ -65,15 +66,15 @@ private:
     float cluster_tolerance ;
     ros::NodeHandle cl_handle;            // node handler  
     ros::Subscriber segnet_msg_sub ;      // SegNet Message Subscriber
-    //ros::Subscriber pointCloud2_msg_sub ; // PointCloud2 message Subscriber
+    ros::Subscriber pointCloud2_msg_sub ; // PointCloud2 message Subscriber
     ros::Publisher clusters_msg_pub ;    // Clusters node Message Publisher
-    //ros::Publisher descriptors_msg_pub ;  // Clusters node descriptors message
-    
+    ros::Publisher descriptors_msg_pub ;  // Clusters node descriptors message
+
 public:
 
     ClustersPointClouds();
     void frameCallback(const rp_semantic::Frame msg);
-    void clusteringPointcloud(const pcl::PointCloud<pcl::PointXYZL>::Ptr cloud , std::vector<rp_semantic::Cluster> clusters);
+    void clusteringPointcloud(const pcl::PointCloud<pcl::PointXYZL>::Ptr cloud , std::vector<rp_semantic::Cluster> &clusters);
     void bowCallback(const sensor_msgs::PointCloud2 pc_msg );
     void computeBoW( const pcl::PointCloud<pcl::PointXYZL>::Ptr cloud_in,  std::vector<float> &boW_descriptor );
     void computeBoWP(const std::vector<rp_semantic::Cluster> clusters, std::vector<float> &boWP_descriptor );
@@ -83,6 +84,7 @@ public:
 
 ClustersPointClouds::ClustersPointClouds(){
 
+    visualize_clusters = true;
     // Initialization of variables
     num_labels = 37 ;
 
@@ -98,11 +100,11 @@ ClustersPointClouds::ClustersPointClouds(){
 
     // Subscribers  // Topic subscribe to : rp_semantic/labels_pointcloud
     segnet_msg_sub = cl_handle.subscribe("/semantic_frame", 10, &ClustersPointClouds::frameCallback , this ); // Subscriber
-    //pointCloud2_msg_sub = cl_handle.subscribe("rp_semantic/semantic_fused_pc", 10, &ClustersPointClouds::bowCallback , this ); // Subscriber
-    
+    pointCloud2_msg_sub = cl_handle.subscribe("rp_semantic/semantic_fused_pc", 10, &ClustersPointClouds::bowCallback , this ); // Subscriber
+
     // Publishers
     clusters_msg_pub = cl_handle.advertise<rp_semantic::LabelClusters>("rp_semantic/labels_clusters", 10); // Publisher  
-    //descriptors_msg_pub = cl_handle.advertise<rp_semantic::BoWPDescriptors>("rp_semantic/bow_bowp_descriptors2", 10); // Publisher
+    descriptors_msg_pub = cl_handle.advertise<rp_semantic::BoWPDescriptors>("rp_semantic/place_descriptors", 10); // Publisher
 }
 
 
@@ -111,7 +113,6 @@ void ClustersPointClouds::frameCallback(const rp_semantic::Frame msg){
     pcl::PointCloud<pcl::PointXYZL>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZL> );          // Creating Pointcloud structured of type pcl::PointXYZL
     pcl::PCLPointCloud2 pcl_pc2;
     cv::Mat label_img;
-    
 
     // Unpack sensor_msgs/Pointcloud2 in msg.raw_pointcloud into a pointcloud
     pcl_conversions::toPCL( msg.raw_pointcloud , pcl_pc2 );
@@ -162,11 +163,11 @@ void ClustersPointClouds::frameCallback(const rp_semantic::Frame msg){
     ROS_DEBUG_STREAM("finsished making label cloud" << endl);
     //msg_out.clusters.push_back(cluster);
     rp_semantic::LabelClusters msg_out;
-    
+
     // Clustring 
     std::vector<rp_semantic::Cluster> clusters ;
     clusteringPointcloud( cloud , clusters);
-    
+
     // Filling LabelClusters message 
     std::copy( clusters.begin(), clusters.end() , back_inserter(msg_out.clusters) ) ; //back_inserter(msg_out.clusters);
     msg_out.node_id  = msg.node_id ;
@@ -176,22 +177,22 @@ void ClustersPointClouds::frameCallback(const rp_semantic::Frame msg){
     clusters_msg_pub.publish(msg_out) ;
 
     cout<< "frameCallback function ended sucessfully " <<endl ;
-   
+
 } // end of callback function
 
 
 
 void ClustersPointClouds::bowCallback(sensor_msgs::PointCloud2 pc_msg ){
 
-    // Pointcloud2 initialization 
+    // Initialize pointcloud for msg to pcl conversion
     pcl::PCLPointCloud2 pcl_pc2;
-    
+
     // Unpack sensor_msgs/Pointcloud2 in pc_msg.raw_pointcloud into a pointcloud
     pcl_conversions::toPCL( pc_msg , pcl_pc2 );
     pcl::PointCloud<pcl::PointXYZL>::Ptr cloud_in( new pcl::PointCloud<pcl::PointXYZL> );  // Pointcloud in of type PointXYZRGB
     pcl::fromPCLPointCloud2(pcl_pc2,*cloud_in);
 
-    ROS_DEBUG_STREAM("finsished making label cloud" << endl);
+    ROS_INFO_STREAM("Finished conversion to pcl pointcloud");
 
     // Compute boW of the clusters  
     std::vector<float>  boW( num_labels ,0 ) ;
@@ -201,17 +202,27 @@ void ClustersPointClouds::bowCallback(sensor_msgs::PointCloud2 pc_msg ){
     std::vector<rp_semantic::Cluster>  clusters;
     clusteringPointcloud( cloud_in, clusters );
 
+    //
+    if(visualize_clusters){
+        rp_semantic::LabelClusters lc_msg;
+
+        std::copy(clusters.begin(), clusters.end(), back_inserter(lc_msg.clusters));
+
+        clusters_msg_pub.publish(lc_msg);
+    }
+
     // Compute boWP of the cluster
-    std::vector<float>  boWp(num_labels*num_labels) ;
+    std::vector<float>  boWp(num_labels*num_labels, 0) ;
     computeBoWP( clusters, boWp );
 
     // Publishing BoW and boWP 
-    rp_semantic::BoWP msg_descriptors ;
-    
+    rp_semantic::BoWPDescriptors msg_descriptors;
+
     // Filling the boW and boWP descripto message
-    std::copy( boW.begin(), boW.end() , msg_descriptors.bow.begin() ) ;
-    std::copy( boWp.begin(), boWp.end() , msg_descriptors.bowp.begin() ) ;
-    //descriptors_msg_pub.publish( msg_descriptors );
+    std::copy( boW.begin(), boW.end() , back_inserter(msg_descriptors.bow) ) ;
+    std::copy( boWp.begin(), boWp.end() , back_inserter(msg_descriptors.bowp) ) ;
+
+    descriptors_msg_pub.publish( msg_descriptors );
 
     cout<< "bowCallback function ended sucessfully " <<endl ;
 
@@ -219,10 +230,10 @@ void ClustersPointClouds::bowCallback(sensor_msgs::PointCloud2 pc_msg ){
 
 
 
-void ClustersPointClouds::clusteringPointcloud(const pcl::PointCloud<pcl::PointXYZL>::Ptr cloud , std::vector<rp_semantic::Cluster> clusters ){    
+void ClustersPointClouds::clusteringPointcloud(const pcl::PointCloud<pcl::PointXYZL>::Ptr cloud , std::vector<rp_semantic::Cluster> &clusters ){
     // Extracting cluster for each labels
     for(int cl = 0 ; cl < num_labels ; cl ++ ){
-        if(cl == 1 || cl == 2 || cl == 22)
+        if(cl == 0 || cl == 1 || cl == 21   )
             continue;
 
         // Create the filtering object
@@ -293,72 +304,58 @@ void ClustersPointClouds::clusteringPointcloud(const pcl::PointCloud<pcl::PointX
             cluster.z = p.z ;
             cluster.radius = std::sqrt(dist_max);
 
-            clusters.push_back(cluster);    
+            clusters.push_back(cluster);
         } //cl clusters
-
     } // cl
-
 }// end Cluster Function
 
 
 void ClustersPointClouds::computeBoW(const pcl::PointCloud<pcl::PointXYZL>::Ptr cloud_in, std::vector<float> &boW_descriptor ){
 
-
-    // Method 1 : Computing BoW histogram
     for( int i = 0 ; i < cloud_in->points.size() ; i++ ){
+        if( cloud_in->points[i].label > 36) continue;
 
-      boW_descriptor[ cloud_in->points[i].label ]++ ;
-      //cout << " Point cloud label recieved = " << cloud_in->points[i].label << endl ;
-      //cout << "BOW histogram = " << boW_descriptor[i] << endl;
-
+        boW_descriptor[ cloud_in->points[i].label ]++ ;
     }
-    
-    cout << " BOW ended sucessfully " << endl ;
+
+
 }// end bow Function
 
 
 void ClustersPointClouds::computeBoWP( const std::vector<rp_semantic::Cluster> clusters, std::vector<float> &boWP_descriptor){
- 
-int num_cluster = clusters.size() ;
-vector<float>  array1D_init(num_labels ,0);
-vector<vector<float> >  array2D( num_labels , array1D_init );
-
-// Computing BOWP histogram by using eucleadean distance
-for( int i = 0 ; i < num_cluster ; ++i ){  
-
-    for( int j = i ; j < num_cluster ; ++j ){
-
-        if (i != j ){
-
-            float delta_x = clusters[i].x- clusters[j].x ;
-            float delta_y = clusters[i].y- clusters[j].y ;
-            float delta_z = clusters[i].z- clusters[j].z ;
-            float dist = delta_x * delta_x + delta_y*delta_y + delta_z*delta_z ;
-
-            if( clusters[i].radius > dist ){
-               array2D[ clusters[i].label ][ clusters[j].label] += 1; // Incrementing previous value at that index of that vector by 1               
-            } 
-
-            if( clusters[j].radius > dist ){
-               array2D[ clusters[j].label ][ clusters[i].label] += 1; // Incrementing previous value at that index of that vector by 1              
-            } 
-
-        } //end if main
-
-    } // end i loop
-
-} // end j loop 
 
 
-    // Converting array2D into array1D
+    int num_cluster = clusters.size() ;
+
+    ROS_INFO_STREAM("Making BoWP with " << num_cluster << " clusters");
+
+    vector<float>  array1D_init(num_labels ,0);
+    vector<vector<float> >  cluster_pairs( num_labels , array1D_init );
+
+    // Computing BOWP histogram by using eucleadean distance
+    for( int i = 0 ; i < num_cluster ; ++i ){
+        for( int j = i ; j < num_cluster ; ++j ){
+            if (i != j ){
+                float delta_x = clusters[i].x - clusters[j].x ;
+                float delta_y = clusters[i].y - clusters[j].y ;
+                float delta_z = clusters[i].z - clusters[j].z ;
+                float dist = std::sqrt( delta_x * delta_x + delta_y*delta_y + delta_z*delta_z );
+
+                if( clusters[i].radius > dist )
+                    cluster_pairs[ clusters[i].label ][ clusters[j].label] += 1; // Incrementing previous value at that index of that vector by 1
+
+                if( clusters[j].radius > dist )
+                    cluster_pairs[ clusters[j].label ][ clusters[i].label] += 1; // Incrementing previous value at that index of that vector by 1
+
+            } //end if main
+        } // end i loop
+    } // end j loop
+
+
+    // Converting cluster_pairs into array1D
     for (int row = 0; row < num_labels; row++)
-    {
         for (int col = 0; col < num_labels ; col++)
-        {
-            boWP_descriptor[ row*num_labels+col ] = array2D[row][col] ;
-        }
-    }
-
+            boWP_descriptor[ row*num_labels+col ] = cluster_pairs[row][col] ;
 
 }// end boWP Function    
 

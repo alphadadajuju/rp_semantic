@@ -1,0 +1,10 @@
+<launch>
+
+    <rosparam file="$(find rp_semantic)/config/params_config.yaml" command="load"/>
+
+    <node name="semanticRGB_server" pkg="rp_semantic" type="semanticRGB_server.py"/>
+    <node name="fusion_node" pkg="rp_semantic" type="fusion_node" output="screen"/>
+    <node name="cluster_visualization" pkg="rp_semantic" type="cluster_visualization.py" />
+
+    <node name="clusters_node" pkg="rp_semantic" type="clusters_node" output="screen"/>
+</launch>
