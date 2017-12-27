@@ -1,0 +1,7 @@
+<launch>
+
+    <rosparam file="$(find rp_semantic)/config/params_config.yaml" command="load"/>
+
+    <node name="place_matching" pkg="rp_semantic" type="place_matching.py" output="screen" />
+    <node name="descriptor_publisher" pkg="rp_semantic" type="descriptor_publisher.py" output="screen"/>
+</launch>

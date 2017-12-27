@@ -11,7 +11,7 @@
     <rosparam file="$(find rp_semantic)/config/params_config.yaml" command="load"/>
 
     <group unless="$(arg load_labelled)">
-        <node name="semanticRGB_server" pkg="rp_semantic" type="semanticRGB_server.py"/>
+        <node name="semantic_segmentation" pkg="rp_semantic" type="semantic_segmentation.py" output="screen"/>
     </group>
 
 
@@ -19,4 +19,6 @@
     <node name="cluster_visualization" pkg="rp_semantic" type="cluster_visualization.py" />
 
     <node name="clusters_node" pkg="rp_semantic" type="clusters_node" output="screen"/>
+
+    <node name="descriptor_storage_node" pkg="rp_semantic" type="descriptor_storage_node.py" output="screen"/>
 </launch>

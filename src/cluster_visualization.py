@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 from sensor_msgs.msg import Image
 from sensor_msgs.msg import PointCloud2
 from sensor_msgs.msg import CameraInfo
-from rp_semantic.msg import Frame
+#from rp_semantic.msg import Frame
 from rp_semantic.msg import Cluster
 from rp_semantic.msg import LabelClusters
 from rp_semantic.msg import BoWP
@@ -119,8 +119,6 @@ class ClusterVis:
 
             self.wait_for_message = True
 
-            
-  
             '''
             # To uncomment
             print(type(self.node_id))

@@ -1,31 +1,40 @@
 ## YAML FILE for package "rp_semantic".
 
-# CONFIGURABLE PARAMETERS SemanticRGB_node.py 
-rp_semantic/semanticRGB_node/f_height : 0
-rp_semantic/semanticRGB_node/f_width : 0 
-rp_semantic/semanticRGB_node/wait_for_new_frame : True
-rp_semantic/semanticRGB_node/rgb_has_fresh : False
-rp_semantic/semanticRGB_node/pointcloud_has_fresh : False
-rp_semantic/semanticRGB_node/node_id : 1
+#------------------------------------------------
+# Computer dependent parameters
+#------------------------------------------------
 
-# CONFIGURABLE PARAMETERS clusters_node.cpp
-rp_semantic/clusters_node/num_labels : 37  
-rp_semantic/clusters_node/cluster_tolerance : 0.04
+# Caffe configuration
+rp_semantic/caffe_root_path: '/home/albert/GitHub/caffe-segnet-cudnn5/'
+rp_semantic/caffe_model_path: '/home/albert/rp_data/'
+
+# Descriptor storage parameters
+rp_semantic/descriptor_file: '/home/albert/rp_data/descriptors.txt'
+
+#------------------------------------------------
+# Debugging
+#------------------------------------------------
+
+rp_semantic/publish_rgb_frame: true
+rp_semantic/publish_rgb_labels: true
+
+rp_semantic/publish_cluster_markers: false # TODO fix visualization message
+
+#------------------------------------------------
+# Algorithm parameters
+#------------------------------------------------
+
+# Reshape size for net output to match with camera intrinsics matrix
+rp_semantic/sensor_image_height: 480
+rp_semantic/sensor_image_width: 640
+
+# Cluster parameters
+rp_semantic/clusters_node/cluster_tolerance : 0.04 # in cm.
 rp_semantic/clusters_node/min_cluster_size : 500
 rp_semantic/clusters_node/max_cluster_size : 75000 # 50000
 
-# CONFIGURABLE PARAMETERS BOWP_matching.py 
-rp_semantic/BOWP_matching/p : 3  # Frame margin for matching min of 6
-rp_semantic/BOWP_matching/DEBUG_MODE : False
-rp_semantic/BOWP_matching/OUTPUT_MODE : 'file'
-rp_semantic/BOWP_matching/dist_exponent : 1.0
-rp_semantic/BOWP_matching/posterior_thresh : 0.5
-rp_semantic/BOWP_matching/prior_neighbourhood : 2
+# Matching parameters
+rp_semantic/BOWP_matching/dist_exponent : 3.0
 
 
-# CONFIGURABLE PARAMETERS BOWP_histogram
-rp_semantic/BOWP_histogram/num_class : 37
-rp_semantic/BOWP_histogram/wait_for_message : True
-rp_semantic/BOWP_histogram/label_2d_ready : False
-rp_semantic/BOWP_histogram/label_2d : None
-rp_semantic/BOWP_histogram/label_cluster_msg : None
+

@@ -10,7 +10,7 @@
 
 #include "rp_semantic/Cluster.h"
 #include "rp_semantic/LabelClusters.h"
-#include "rp_semantic/Frame.h"
+//#include "rp_semantic/Frame.h"
 
 #include "rp_semantic/RGB2LabelProb.h"
 
